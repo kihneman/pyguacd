@@ -23,7 +23,7 @@ Here are some items to help get started with `pyguacd`:
   ```
 - Next, the following command will install `pyguad` from this repo into the current environment.
   ```
-  pip install git+https://github.com/kihneman/pyguacd.git
+  pip install git+https://github.com/Keeper-Security/pyguacd.git
   ```
 - Finally run `pyguacd` in place of where `guacd` would normally be run.
   ( Only the options `-b`, `-l`, and `-L` work for `pyguacd` at the moment. )
