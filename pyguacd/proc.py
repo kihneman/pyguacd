@@ -1,6 +1,7 @@
 from ctypes import c_int, pointer, POINTER
 from dataclasses import dataclass
-from multiprocessing import Process
+from enum import auto, StrEnum
+from multiprocessing import Event, Process
 from typing import Optional
 from uuid import uuid4
 
@@ -17,6 +18,12 @@ from .constants import (
     GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_USEC_TIMEOUT
 )
 from .log import guacd_log, guacd_log_guac_error
+
+
+class ZsockStatus(StrEnum):
+    CLIENT_READY = auto()
+    USER_SOCKET_ERROR = auto()
+    USER_SOCKET_RECV = auto()
 
 
 @dataclass
@@ -45,13 +52,15 @@ class GuacdProc:
         self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
         self.zmq_socket.connect(self.addr())
 
-    def process_ready(self):
+    def client_ready(self):
         """Send process ready over socket"""
-        self.zmq_socket.send_json({'status': 'ready'})
+        self.zmq_socket.send_json({'status': ZsockStatus.CLIENT_READY})
 
     def recv_user_socket_path(self):
-        self.process_ready()
-        user_socket_path = self.zmq_socket.recv_string()
+        self.client_ready()
+        user_socket_path = self.zmq_socket.recv_json().get('user_socket_path')
+        resp_status = ZsockStatus.USER_SOCKET_RECV if user_socket_path else ZsockStatus.USER_SOCKET_ERROR
+        self.zmq_socket.send_json({'status': resp_status})
         return user_socket_path
 
     def send_new_user_socket(self, create_zsock=False):
@@ -59,20 +68,26 @@ class GuacdProc:
         if create_zsock:
             self.zmq_user_socket = self.zmq_context.socket(zmq.PAIR)
             self.zmq_user_socket.bind(user_socket_path)
-        self.zmq_socket.send_string(user_socket_path)
+        self.zmq_socket.send_json({'user_socket_path': user_socket_path})
+        self.wait_for_status(ZsockStatus.USER_SOCKET_RECV)
+        return user_socket_path
 
     def set_user_socket_path(self):
         uid = uuid4().hex
         self.user_socket_path = f'ipc//{GUACD_USER_SOCKET_PATH}{uid}'
         return self.user_socket_path
 
-    def wait_for_process(self):
-        """Wait for process to be ready to receive user connection"""
+    def wait_for_client(self):
+        """Wait for client to be ready to receive user connection"""
+        self.wait_for_status(ZsockStatus.CLIENT_READY)
+
+    def wait_for_status(self, status):
+        """Wait for status"""
         msg = self.zmq_socket.recv_json()
-        msg_status = msg.get('status', None)
-        if msg_status != 'ready':
+        msg_status = msg.get('status')
+        if msg_status != status:
             guacd_log(
-                GuacClientLogLevel.GUAC_LOG_WARNING, f'Unexpected status "{msg_status}" waiting for guacd process'
+                GuacClientLogLevel.GUAC_LOG_WARNING, f'Expected status "{status}", but received status "{msg_status}"'
             )
 
 
@@ -99,11 +114,11 @@ def cleanup_client(client):
 
 
 def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
-    client_ptr = proc.client_ptr
-    client = client_ptr.contents
-
     # Bind socket for receiving new users
     proc.bind_process()
+
+    client_ptr = proc.client_ptr
+    client = client_ptr.contents
 
     # Init client for selected protocol
     if guac_client_load_plugin(client_ptr, String(protocol)):
