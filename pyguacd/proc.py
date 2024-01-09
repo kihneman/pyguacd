@@ -49,6 +49,11 @@ class GuacdProc:
         """Send process ready over socket"""
         self.zmq_socket.send_json({'status': 'ready'})
 
+    def recv_user_socket_path(self):
+        self.process_ready()
+        user_socket_path = self.zmq_socket.recv_string()
+        return user_socket_path
+
     def send_new_user_socket(self, create_zsock=False):
         user_socket_path = self.set_user_socket_path()
         if create_zsock:
@@ -133,7 +138,8 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user.socket = guac_socket_create_zmq(zmq.PAIR, proc.user_socket_path(), False)
+    user_socket_path = proc.recv_user_socket_path()
+    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_path, False)
     user.client = client_ptr
     user.owner = 1
     # Extra debug
