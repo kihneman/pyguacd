@@ -17,9 +17,9 @@ class TcpZmqProxy:
         self.zsock = self.ctx.socket(zmq.PAIR)
         if ipc_socket_path is None:
             makedirs(IPC_DIR, exist_ok=True)
-            ipc_socket_path = join(IPC_DIR, ZMQ_PAIR_IPC)
+            ipc_socket_path = f'ipc://{join(IPC_DIR, ZMQ_PAIR_IPC)}'
         self.ipc_socket_path = ipc_socket_path
-        self.zsock.bind(f'ipc://{self.ipc_socket_path}')
+        self.zsock.bind(self.ipc_socket_path)
 
     async def async_tcp_to_zmq(self, tcp_reader: asyncio.StreamReader):
         # Transfer data from socket to file descriptor
