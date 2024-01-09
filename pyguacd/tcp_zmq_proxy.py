@@ -60,12 +60,12 @@ class TcpZmqProxy:
         await asyncio.wait(pending)
 
 
-async def launch_proxy(ipc_socket_path=None, sock=None, cb=None, cb_args=()):
+async def async_proxy(ipc_socket_path=None, tcp_sock=None, cb=None, cb_args=()):
     tcp_zmq_proxy = TcpZmqProxy(ipc_socket_path)
-    if sock is None:
+    if tcp_sock is None:
         server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, '127.0.0.1', 8888)
     else:
-        server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, sock=sock)
+        server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, sock=tcp_sock)
 
     addrs = ', '.join(str(s.getsockname()) for s in server.sockets)
     print(f'Serving on {addrs}')
@@ -81,8 +81,12 @@ async def launch_proxy(ipc_socket_path=None, sock=None, cb=None, cb_args=()):
         cb(*cb_args)
 
 
+def launch_proxy(*args, **kwargs):
+    asyncio.run(async_proxy(*args, **kwargs))
+
+
 if __name__ == '__main__':
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(('127.0.0.1', 8888))
-    asyncio.run(launch_proxy(sock=sock))
+    launch_proxy(tcp_sock=sock)
