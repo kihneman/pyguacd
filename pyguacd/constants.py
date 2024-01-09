@@ -1,4 +1,6 @@
+import os
 from enum import auto, IntEnum
+from os.path import join
 
 
 EXIT_SUCCESS = 0
@@ -13,6 +15,14 @@ GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
 
 # The default port that guacd should bind to, if no other port is explicitly specified.
 GUACD_DEFAULT_BIND_PORT = '4822'
+
+# Unix Domain Socket file constants
+GUACD_SOCKET_DEFAULT_DIR = ''
+GUACD_SOCKET_DIR = os.environ.get('GUACD_SOCKET_DIR', GUACD_SOCKET_DEFAULT_DIR)
+GUACD_PROCESS_SOCKET_FILENAME = 'proc-'
+GUACD_PROCESS_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_PROCESS_SOCKET_FILENAME)
+GUACD_USER_SOCKET_FILENAME = 'user-'
+GUACD_USER_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_USER_SOCKET_FILENAME)
 
 # The number of milliseconds to wait for messages in any phase before
 # timing out and closing the connection with an error.

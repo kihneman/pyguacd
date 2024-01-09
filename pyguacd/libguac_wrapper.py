@@ -1,7 +1,7 @@
 r"""Wrapper for user-handlers.h
 
 Generated with:
-/tmp/guacamole-server/venv-guacd/bin/ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . -o libguac_wrapper.py src/libguac/user-handlers.h src/libguac/guacamole/client.h src/libguac/guacamole/error.h src/libguac/guacamole/error-types.h src/libguac/guacamole/mem.h src/libguac/guacamole/parser.h src/libguac/guacamole/protocol.h src/libguac/guacamole/socket.h src/libguac/guacamole/user.h
+/tmp/guacamole-server/venv-ctypesgen/bin/ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . -o libguac_wrapper.py src/libguac/user-handlers.h src/libguac/guacamole/client.h src/libguac/client-internal.h src/libguac/guacamole/error.h src/libguac/guacamole/error-types.h src/libguac/guacamole/parser.h src/libguac/guacamole/protocol.h src/libguac/guacamole/socket.h src/libguac/guacamole/socket-zmq.h src/libguac/guacamole/user.h
 
 Do not modify this file.
 """
@@ -440,7 +440,14 @@ def ord_if_char(value):
 # End preamble
 
 _libs = {}
-_libdirs = ['/opt/guacamole/lib']
+if sys.platform.startswith('linux'):
+    _libdirs = ['/opt/guacamole/lib']
+elif sys.platform.startswith('win'):
+    # _libdirs = [
+    #     '\\Users\\KevinKihneman\\Downloads\\windows-guac-build\\mingw64\\bin',
+    #     '\\Users\\KevinKihneman\\Downloads\\windows-guac-build\\mingw64\\lib\\freerdp2',
+    # ]
+    _libdirs = ['\\msys64\\usr\\bin', '\\msys64\\mingw64\\bin', '\\msys64\\mingw64\\lib']
 
 # Begin loader
 
@@ -857,17 +864,25 @@ del loaderclass
 
 # End loader
 
-add_library_search_dirs(['/opt/guacamole/lib'])
-
-# Begin libraries
-_libs["libguac"] = load_library("libguac")
+if sys.platform.startswith('linux'):
+    add_library_search_dirs(['/opt/guacamole/lib'])
+    # Begin libraries
+    _libs["libguac"] = load_library("libguac")
+elif sys.platform.startswith('win'):
+    # add_library_search_dirs([
+    #     '\\Users\\KevinKihneman\\Downloads\\windows-guac-build\\mingw64\\bin',
+    #     '\\Users\\KevinKihneman\\Downloads\\windows-guac-build\\mingw64\\lib\\freerdp2',
+    # ])
+    add_library_search_dirs(['\\msys64\\usr\\bin', '\\msys64\\mingw64\\bin', '\\msys64\\mingw64\\lib'])
+    # Begin libraries
+    _libs["libguac"] = load_library("libguac")
 
 # 1 libraries
 # End libraries
 
 # No modules
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 48
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 59
 class struct_guac_client(Structure):
     pass
 
@@ -1243,6 +1258,12 @@ class struct__cairo_surface(Structure):
 
 cairo_surface_t = struct__cairo_surface# /usr/include/cairo/cairo.h: 164
 
+# /tmp/guacamole-server/src/libguac/client-internal.h: 44
+class struct_guac_client_internal(Structure):
+    pass
+
+guac_client_internal = struct_guac_client_internal# /tmp/guacamole-server/src/libguac/guacamole/client.h: 57
+
 struct_guac_client.__slots__ = [
     'socket',
     'pending_socket',
@@ -1251,25 +1272,13 @@ struct_guac_client.__slots__ = [
     'last_sent_timestamp',
     'free_handler',
     'log_handler',
-    '__buffer_pool',
-    '__layer_pool',
-    '__stream_pool',
-    '__output_streams',
     'connection_id',
-    '__users_lock',
-    '__users',
-    '__pending_users_lock',
-    '__pending_users_timer',
-    '__pending_users_timer_state',
-    '__pending_users_timer_mutex',
-    '__pending_users',
-    '__owner',
     'connected_users',
     'join_handler',
     'join_pending_handler',
     'leave_handler',
     'args',
-    '__plugin_handle',
+    'internal',
 ]
 struct_guac_client._fields_ = [
     ('socket', POINTER(guac_socket)),
@@ -1279,40 +1288,28 @@ struct_guac_client._fields_ = [
     ('last_sent_timestamp', guac_timestamp),
     ('free_handler', POINTER(guac_client_free_handler)),
     ('log_handler', POINTER(guac_client_log_handler)),
-    ('__buffer_pool', POINTER(guac_pool)),
-    ('__layer_pool', POINTER(guac_pool)),
-    ('__stream_pool', POINTER(guac_pool)),
-    ('__output_streams', POINTER(guac_stream)),
     ('connection_id', String),
-    ('__users_lock', guac_rwlock),
-    ('__users', POINTER(guac_user)),
-    ('__pending_users_lock', guac_rwlock),
-    ('__pending_users_timer', timer_t),
-    ('__pending_users_timer_state', c_int),
-    ('__pending_users_timer_mutex', pthread_mutex_t),
-    ('__pending_users', POINTER(guac_user)),
-    ('__owner', POINTER(guac_user)),
     ('connected_users', c_int),
     ('join_handler', POINTER(guac_user_join_handler)),
     ('join_pending_handler', POINTER(guac_client_join_pending_handler)),
     ('leave_handler', POINTER(guac_user_leave_handler)),
     ('args', POINTER(POINTER(c_char))),
-    ('__plugin_handle', POINTER(None)),
+    ('internal', POINTER(guac_client_internal)),
 ]
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 325
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 259
 if _libs["libguac"].has("guac_client_alloc", "cdecl"):
     guac_client_alloc = _libs["libguac"].get("guac_client_alloc", "cdecl")
     guac_client_alloc.argtypes = []
     guac_client_alloc.restype = POINTER(guac_client)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 332
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 266
 if _libs["libguac"].has("guac_client_free", "cdecl"):
     guac_client_free = _libs["libguac"].get("guac_client_free", "cdecl")
     guac_client_free.argtypes = [POINTER(guac_client)]
     guac_client_free.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 344
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 278
 if _libs["libguac"].has("guac_client_log", "cdecl"):
     _func = _libs["libguac"].get("guac_client_log", "cdecl")
     _restype = None
@@ -1320,19 +1317,19 @@ if _libs["libguac"].has("guac_client_log", "cdecl"):
     _argtypes = [POINTER(guac_client), guac_client_log_level, String]
     guac_client_log = _variadic_function(_func,_restype,_argtypes,_errcheck)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 358
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 292
 if _libs["libguac"].has("vguac_client_log", "cdecl"):
     vguac_client_log = _libs["libguac"].get("vguac_client_log", "cdecl")
     vguac_client_log.argtypes = [POINTER(guac_client), guac_client_log_level, String, c_void_p]
     vguac_client_log.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 368
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 302
 if _libs["libguac"].has("guac_client_stop", "cdecl"):
     guac_client_stop = _libs["libguac"].get("guac_client_stop", "cdecl")
     guac_client_stop.argtypes = [POINTER(guac_client)]
     guac_client_stop.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 381
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 315
 if _libs["libguac"].has("guac_client_abort", "cdecl"):
     _func = _libs["libguac"].get("guac_client_abort", "cdecl")
     _restype = None
@@ -1340,171 +1337,171 @@ if _libs["libguac"].has("guac_client_abort", "cdecl"):
     _argtypes = [POINTER(guac_client), guac_protocol_status, String]
     guac_client_abort = _variadic_function(_func,_restype,_argtypes,_errcheck)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 396
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 330
 if _libs["libguac"].has("vguac_client_abort", "cdecl"):
     vguac_client_abort = _libs["libguac"].get("vguac_client_abort", "cdecl")
     vguac_client_abort.argtypes = [POINTER(guac_client), guac_protocol_status, String, c_void_p]
     vguac_client_abort.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 406
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 340
 if _libs["libguac"].has("guac_client_alloc_buffer", "cdecl"):
     guac_client_alloc_buffer = _libs["libguac"].get("guac_client_alloc_buffer", "cdecl")
     guac_client_alloc_buffer.argtypes = [POINTER(guac_client)]
     guac_client_alloc_buffer.restype = POINTER(guac_layer)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 415
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 349
 if _libs["libguac"].has("guac_client_alloc_layer", "cdecl"):
     guac_client_alloc_layer = _libs["libguac"].get("guac_client_alloc_layer", "cdecl")
     guac_client_alloc_layer.argtypes = [POINTER(guac_client)]
     guac_client_alloc_layer.restype = POINTER(guac_layer)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 424
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 358
 if _libs["libguac"].has("guac_client_free_buffer", "cdecl"):
     guac_client_free_buffer = _libs["libguac"].get("guac_client_free_buffer", "cdecl")
     guac_client_free_buffer.argtypes = [POINTER(guac_client), POINTER(guac_layer)]
     guac_client_free_buffer.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 433
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 367
 if _libs["libguac"].has("guac_client_free_layer", "cdecl"):
     guac_client_free_layer = _libs["libguac"].get("guac_client_free_layer", "cdecl")
     guac_client_free_layer.argtypes = [POINTER(guac_client), POINTER(guac_layer)]
     guac_client_free_layer.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 446
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 380
 if _libs["libguac"].has("guac_client_alloc_stream", "cdecl"):
     guac_client_alloc_stream = _libs["libguac"].get("guac_client_alloc_stream", "cdecl")
     guac_client_alloc_stream.argtypes = [POINTER(guac_client)]
     guac_client_alloc_stream.restype = POINTER(guac_stream)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 458
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 392
 if _libs["libguac"].has("guac_client_free_stream", "cdecl"):
     guac_client_free_stream = _libs["libguac"].get("guac_client_free_stream", "cdecl")
     guac_client_free_stream.argtypes = [POINTER(guac_client), POINTER(guac_stream)]
     guac_client_free_stream.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 472
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 406
 if _libs["libguac"].has("guac_client_add_user", "cdecl"):
     guac_client_add_user = _libs["libguac"].get("guac_client_add_user", "cdecl")
     guac_client_add_user.argtypes = [POINTER(guac_client), POINTER(guac_user), c_int, POINTER(POINTER(c_char))]
     guac_client_add_user.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 481
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 415
 if _libs["libguac"].has("guac_client_remove_user", "cdecl"):
     guac_client_remove_user = _libs["libguac"].get("guac_client_remove_user", "cdecl")
     guac_client_remove_user.argtypes = [POINTER(guac_client), POINTER(guac_user)]
     guac_client_remove_user.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 503
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 437
 if _libs["libguac"].has("guac_client_foreach_user", "cdecl"):
     guac_client_foreach_user = _libs["libguac"].get("guac_client_foreach_user", "cdecl")
     guac_client_foreach_user.argtypes = [POINTER(guac_client), POINTER(guac_user_callback), POINTER(None)]
     guac_client_foreach_user.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 523
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 457
 if _libs["libguac"].has("guac_client_foreach_pending_user", "cdecl"):
     guac_client_foreach_pending_user = _libs["libguac"].get("guac_client_foreach_pending_user", "cdecl")
     guac_client_foreach_pending_user.argtypes = [POINTER(guac_client), POINTER(guac_user_callback), POINTER(None)]
     guac_client_foreach_pending_user.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 552
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 486
 if _libs["libguac"].has("guac_client_for_owner", "cdecl"):
     guac_client_for_owner = _libs["libguac"].get("guac_client_for_owner", "cdecl")
     guac_client_for_owner.argtypes = [POINTER(guac_client), POINTER(guac_user_callback), POINTER(None)]
     guac_client_for_owner.restype = POINTER(c_ubyte)
     guac_client_for_owner.errcheck = lambda v,*a : cast(v, c_void_p)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 585
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 519
 if _libs["libguac"].has("guac_client_for_user", "cdecl"):
     guac_client_for_user = _libs["libguac"].get("guac_client_for_user", "cdecl")
     guac_client_for_user.argtypes = [POINTER(guac_client), POINTER(guac_user), POINTER(guac_user_callback), POINTER(None)]
     guac_client_for_user.restype = POINTER(c_ubyte)
     guac_client_for_user.errcheck = lambda v,*a : cast(v, c_void_p)
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 604
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 538
 if _libs["libguac"].has("guac_client_end_frame", "cdecl"):
     guac_client_end_frame = _libs["libguac"].get("guac_client_end_frame", "cdecl")
     guac_client_end_frame.argtypes = [POINTER(guac_client)]
     guac_client_end_frame.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 628
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 562
 if _libs["libguac"].has("guac_client_end_multiple_frames", "cdecl"):
     guac_client_end_multiple_frames = _libs["libguac"].get("guac_client_end_multiple_frames", "cdecl")
     guac_client_end_multiple_frames.argtypes = [POINTER(guac_client), c_int]
     guac_client_end_multiple_frames.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 642
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 576
 if _libs["libguac"].has("guac_client_load_plugin", "cdecl"):
     guac_client_load_plugin = _libs["libguac"].get("guac_client_load_plugin", "cdecl")
     guac_client_load_plugin.argtypes = [POINTER(guac_client), String]
     guac_client_load_plugin.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 656
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 590
 if _libs["libguac"].has("guac_client_get_processing_lag", "cdecl"):
     guac_client_get_processing_lag = _libs["libguac"].get("guac_client_get_processing_lag", "cdecl")
     guac_client_get_processing_lag.argtypes = [POINTER(guac_client)]
     guac_client_get_processing_lag.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 672
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 606
 if _libs["libguac"].has("guac_client_owner_send_required", "cdecl"):
     guac_client_owner_send_required = _libs["libguac"].get("guac_client_owner_send_required", "cdecl")
     guac_client_owner_send_required.argtypes = [POINTER(guac_client), POINTER(POINTER(c_char))]
     guac_client_owner_send_required.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 698
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 632
 if _libs["libguac"].has("guac_client_stream_argv", "cdecl"):
     guac_client_stream_argv = _libs["libguac"].get("guac_client_stream_argv", "cdecl")
     guac_client_stream_argv.argtypes = [POINTER(guac_client), POINTER(guac_socket), String, String, String]
     guac_client_stream_argv.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 730
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 664
 if _libs["libguac"].has("guac_client_stream_png", "cdecl"):
     guac_client_stream_png = _libs["libguac"].get("guac_client_stream_png", "cdecl")
     guac_client_stream_png.argtypes = [POINTER(guac_client), POINTER(guac_socket), guac_composite_mode, POINTER(guac_layer), c_int, c_int, POINTER(cairo_surface_t)]
     guac_client_stream_png.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 768
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 702
 if _libs["libguac"].has("guac_client_stream_jpeg", "cdecl"):
     guac_client_stream_jpeg = _libs["libguac"].get("guac_client_stream_jpeg", "cdecl")
     guac_client_stream_jpeg.argtypes = [POINTER(guac_client), POINTER(guac_socket), guac_composite_mode, POINTER(guac_layer), c_int, c_int, POINTER(cairo_surface_t), c_int]
     guac_client_stream_jpeg.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 813
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 747
 if _libs["libguac"].has("guac_client_stream_webp", "cdecl"):
     guac_client_stream_webp = _libs["libguac"].get("guac_client_stream_webp", "cdecl")
     guac_client_stream_webp.argtypes = [POINTER(guac_client), POINTER(guac_socket), guac_composite_mode, POINTER(guac_layer), c_int, c_int, POINTER(cairo_surface_t), c_int, c_int]
     guac_client_stream_webp.restype = None
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 830
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 764
 if _libs["libguac"].has("guac_client_owner_supports_msg", "cdecl"):
     guac_client_owner_supports_msg = _libs["libguac"].get("guac_client_owner_supports_msg", "cdecl")
     guac_client_owner_supports_msg.argtypes = [POINTER(guac_client)]
     guac_client_owner_supports_msg.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 845
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 779
 if _libs["libguac"].has("guac_client_owner_supports_required", "cdecl"):
     guac_client_owner_supports_required = _libs["libguac"].get("guac_client_owner_supports_required", "cdecl")
     guac_client_owner_supports_required.argtypes = [POINTER(guac_client)]
     guac_client_owner_supports_required.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 863
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 797
 if _libs["libguac"].has("guac_client_owner_notify_join", "cdecl"):
     guac_client_owner_notify_join = _libs["libguac"].get("guac_client_owner_notify_join", "cdecl")
     guac_client_owner_notify_join.argtypes = [POINTER(guac_client), POINTER(guac_user)]
     guac_client_owner_notify_join.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 881
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 815
 if _libs["libguac"].has("guac_client_owner_notify_leave", "cdecl"):
     guac_client_owner_notify_leave = _libs["libguac"].get("guac_client_owner_notify_leave", "cdecl")
     guac_client_owner_notify_leave.argtypes = [POINTER(guac_client), POINTER(guac_user)]
     guac_client_owner_notify_leave.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 894
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 828
 if _libs["libguac"].has("guac_client_supports_webp", "cdecl"):
     guac_client_supports_webp = _libs["libguac"].get("guac_client_supports_webp", "cdecl")
     guac_client_supports_webp.argtypes = [POINTER(guac_client)]
     guac_client_supports_webp.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/client.h: 899
+# /tmp/guacamole-server/src/libguac/guacamole/client.h: 833
 try:
     GUAC_DEFAULT_LAYER = (POINTER(guac_layer)).in_dll(_libs["libguac"], "GUAC_DEFAULT_LAYER")
 except:
@@ -1695,163 +1692,110 @@ if _libs["libguac"].has("__guac_user_call_opcode_handler", "cdecl"):
     __guac_user_call_opcode_handler.argtypes = [POINTER(__guac_instruction_handler_mapping), POINTER(guac_user), String, c_int, POINTER(POINTER(c_char))]
     __guac_user_call_opcode_handler.restype = c_int
 
-enum_guac_status = c_int# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+struct_guac_client_internal.__slots__ = [
+    '__buffer_pool',
+    '__layer_pool',
+    '__stream_pool',
+    '__output_streams',
+    '__users_lock',
+    '__users',
+    '__pending_users_lock',
+    '__pending_users_timer',
+    '__pending_users_timer_state',
+    '__pending_users_timer_mutex',
+    '__pending_users',
+    '__owner',
+    '__plugin_handle',
+]
+struct_guac_client_internal._fields_ = [
+    ('__buffer_pool', POINTER(guac_pool)),
+    ('__layer_pool', POINTER(guac_pool)),
+    ('__stream_pool', POINTER(guac_pool)),
+    ('__output_streams', POINTER(guac_stream)),
+    ('__users_lock', guac_rwlock),
+    ('__users', POINTER(guac_user)),
+    ('__pending_users_lock', guac_rwlock),
+    ('__pending_users_timer', timer_t),
+    ('__pending_users_timer_state', c_int),
+    ('__pending_users_timer_mutex', pthread_mutex_t),
+    ('__pending_users', POINTER(guac_user)),
+    ('__owner', POINTER(guac_user)),
+    ('__plugin_handle', POINTER(None)),
+]
 
-GUAC_STATUS_SUCCESS = 0# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+enum_guac_status = c_int# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NO_MEMORY = (GUAC_STATUS_SUCCESS + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_SUCCESS = 0# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_CLOSED = (GUAC_STATUS_NO_MEMORY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NO_MEMORY = (GUAC_STATUS_SUCCESS + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_TIMEOUT = (GUAC_STATUS_CLOSED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_CLOSED = (GUAC_STATUS_NO_MEMORY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_SEE_ERRNO = (GUAC_STATUS_TIMEOUT + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_TIMEOUT = (GUAC_STATUS_CLOSED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_IO_ERROR = (GUAC_STATUS_SEE_ERRNO + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_SEE_ERRNO = (GUAC_STATUS_TIMEOUT + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_INVALID_ARGUMENT = (GUAC_STATUS_IO_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_IO_ERROR = (GUAC_STATUS_SEE_ERRNO + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_INTERNAL_ERROR = (GUAC_STATUS_INVALID_ARGUMENT + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_INVALID_ARGUMENT = (GUAC_STATUS_IO_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NO_SPACE = (GUAC_STATUS_INTERNAL_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_INTERNAL_ERROR = (GUAC_STATUS_INVALID_ARGUMENT + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_INPUT_TOO_LARGE = (GUAC_STATUS_NO_SPACE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NO_SPACE = (GUAC_STATUS_INTERNAL_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_RESULT_TOO_LARGE = (GUAC_STATUS_INPUT_TOO_LARGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_INPUT_TOO_LARGE = (GUAC_STATUS_NO_SPACE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_PERMISSION_DENIED = (GUAC_STATUS_RESULT_TOO_LARGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_RESULT_TOO_LARGE = (GUAC_STATUS_INPUT_TOO_LARGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_BUSY = (GUAC_STATUS_PERMISSION_DENIED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_PERMISSION_DENIED = (GUAC_STATUS_RESULT_TOO_LARGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NOT_AVAILABLE = (GUAC_STATUS_BUSY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_BUSY = (GUAC_STATUS_PERMISSION_DENIED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NOT_SUPPORTED = (GUAC_STATUS_NOT_AVAILABLE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NOT_AVAILABLE = (GUAC_STATUS_BUSY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NOT_INPLEMENTED = (GUAC_STATUS_NOT_SUPPORTED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NOT_SUPPORTED = (GUAC_STATUS_NOT_AVAILABLE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_TRY_AGAIN = (GUAC_STATUS_NOT_INPLEMENTED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NOT_INPLEMENTED = (GUAC_STATUS_NOT_SUPPORTED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_PROTOCOL_ERROR = (GUAC_STATUS_TRY_AGAIN + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_TRY_AGAIN = (GUAC_STATUS_NOT_INPLEMENTED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_NOT_FOUND = (GUAC_STATUS_PROTOCOL_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_PROTOCOL_ERROR = (GUAC_STATUS_TRY_AGAIN + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_CANCELED = (GUAC_STATUS_NOT_FOUND + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_NOT_FOUND = (GUAC_STATUS_PROTOCOL_ERROR + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_OUT_OF_RANGE = (GUAC_STATUS_CANCELED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_CANCELED = (GUAC_STATUS_NOT_FOUND + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_REFUSED = (GUAC_STATUS_OUT_OF_RANGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_OUT_OF_RANGE = (GUAC_STATUS_CANCELED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_TOO_MANY = (GUAC_STATUS_REFUSED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_REFUSED = (GUAC_STATUS_OUT_OF_RANGE + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-GUAC_STATUS_WOULD_BLOCK = (GUAC_STATUS_TOO_MANY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_TOO_MANY = (GUAC_STATUS_REFUSED + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-guac_status = enum_guac_status# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 166
+GUAC_STATUS_WOULD_BLOCK = (GUAC_STATUS_TOO_MANY + 1)# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 36
+guac_status = enum_guac_status# /tmp/guacamole-server/src/libguac/guacamole/error-types.h: 178
+
+# /tmp/guacamole-server/src/libguac/guacamole/error.h: 41
 if _libs["libguac"].has("guac_status_string", "cdecl"):
     guac_status_string = _libs["libguac"].get("guac_status_string", "cdecl")
     guac_status_string.argtypes = [guac_status]
-    guac_status_string.restype = c_char_p
+    if sizeof(c_int) == sizeof(c_void_p):
+        guac_status_string.restype = ReturnString
+    else:
+        guac_status_string.restype = String
+        guac_status_string.errcheck = ReturnString
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 48
+# /tmp/guacamole-server/src/libguac/guacamole/error.h: 53
 if _libs["libguac"].has("__guac_error", "cdecl"):
     __guac_error = _libs["libguac"].get("__guac_error", "cdecl")
     __guac_error.argtypes = []
     __guac_error.restype = POINTER(guac_status)
-
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 61
-if _libs["libguac"].has("__guac_error_message", "cdecl"):
-    __guac_error_message = _libs["libguac"].get("__guac_error_message", "cdecl")
-    __guac_error_message.argtypes = []
-    __guac_error_message.restype = POINTER(POINTER(c_char))
 
 # /tmp/guacamole-server/src/libguac/guacamole/error.h: 66
-if _libs["libguac"].has("guac_status_string", "cdecl"):
-    guac_status_string = _libs["libguac"].get("guac_status_string", "cdecl")
-    guac_status_string.argtypes = [guac_status]
-    guac_status_string.restype = c_char_p
-
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 78
-if _libs["libguac"].has("__guac_error", "cdecl"):
-    __guac_error = _libs["libguac"].get("__guac_error", "cdecl")
-    __guac_error.argtypes = []
-    __guac_error.restype = POINTER(guac_status)
-
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 91
 if _libs["libguac"].has("__guac_error_message", "cdecl"):
     __guac_error_message = _libs["libguac"].get("__guac_error_message", "cdecl")
     __guac_error_message.argtypes = []
     __guac_error_message.restype = POINTER(POINTER(c_char))
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 64
-if _libs["libguac"].has("PRIV_guac_mem_alloc", "cdecl"):
-    PRIV_guac_mem_alloc = _libs["libguac"].get("PRIV_guac_mem_alloc", "cdecl")
-    PRIV_guac_mem_alloc.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_alloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_alloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 94
-if _libs["libguac"].has("PRIV_guac_mem_zalloc", "cdecl"):
-    PRIV_guac_mem_zalloc = _libs["libguac"].get("PRIV_guac_mem_zalloc", "cdecl")
-    PRIV_guac_mem_zalloc.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_zalloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_zalloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 119
-if _libs["libguac"].has("PRIV_guac_mem_ckd_mul", "cdecl"):
-    PRIV_guac_mem_ckd_mul = _libs["libguac"].get("PRIV_guac_mem_ckd_mul", "cdecl")
-    PRIV_guac_mem_ckd_mul.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_mul.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 144
-if _libs["libguac"].has("PRIV_guac_mem_ckd_add", "cdecl"):
-    PRIV_guac_mem_ckd_add = _libs["libguac"].get("PRIV_guac_mem_ckd_add", "cdecl")
-    PRIV_guac_mem_ckd_add.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_add.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 170
-if _libs["libguac"].has("PRIV_guac_mem_ckd_sub", "cdecl"):
-    PRIV_guac_mem_ckd_sub = _libs["libguac"].get("PRIV_guac_mem_ckd_sub", "cdecl")
-    PRIV_guac_mem_ckd_sub.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_sub.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 190
-if _libs["libguac"].has("PRIV_guac_mem_ckd_mul_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_mul_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_mul_or_die", "cdecl")
-    PRIV_guac_mem_ckd_mul_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_mul_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 209
-if _libs["libguac"].has("PRIV_guac_mem_ckd_add_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_add_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_add_or_die", "cdecl")
-    PRIV_guac_mem_ckd_add_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_add_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 229
-if _libs["libguac"].has("PRIV_guac_mem_ckd_sub_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_sub_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_sub_or_die", "cdecl")
-    PRIV_guac_mem_ckd_sub_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_sub_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 266
-if _libs["libguac"].has("PRIV_guac_mem_realloc", "cdecl"):
-    PRIV_guac_mem_realloc = _libs["libguac"].get("PRIV_guac_mem_realloc", "cdecl")
-    PRIV_guac_mem_realloc.argtypes = [POINTER(None), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_realloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_realloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 303
-if _libs["libguac"].has("PRIV_guac_mem_realloc_or_die", "cdecl"):
-    PRIV_guac_mem_realloc_or_die = _libs["libguac"].get("PRIV_guac_mem_realloc_or_die", "cdecl")
-    PRIV_guac_mem_realloc_or_die.argtypes = [POINTER(None), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_realloc_or_die.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_realloc_or_die.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 314
-if _libs["libguac"].has("PRIV_guac_mem_free", "cdecl"):
-    PRIV_guac_mem_free = _libs["libguac"].get("PRIV_guac_mem_free", "cdecl")
-    PRIV_guac_mem_free.argtypes = [POINTER(None)]
-    PRIV_guac_mem_free.restype = None
 
 enum_guac_parse_state = c_int# /tmp/guacamole-server/src/libguac/guacamole/parser-types.h: 57
 
@@ -2292,6 +2236,240 @@ if _libs["libguac"].has("guac_protocol_version_to_string", "cdecl"):
     guac_protocol_version_to_string.argtypes = [guac_protocol_version]
     guac_protocol_version_to_string.restype = c_char_p
 
+# /usr/include/bits/alltypes.h: 355
+class struct_iovec(Structure):
+    pass
+
+struct_iovec.__slots__ = [
+    'iov_base',
+    'iov_len',
+]
+struct_iovec._fields_ = [
+    ('iov_base', POINTER(None)),
+    ('iov_len', c_size_t),
+]
+
+socklen_t = c_uint# /usr/include/bits/alltypes.h: 367
+
+sa_family_t = c_ushort# /usr/include/bits/alltypes.h: 372
+
+# /usr/include/sys/socket.h: 22
+class struct_msghdr(Structure):
+    pass
+
+struct_msghdr.__slots__ = [
+    'msg_name',
+    'msg_namelen',
+    'msg_iov',
+    'msg_iovlen',
+    '__pad1',
+    'msg_control',
+    'msg_controllen',
+    '__pad2',
+    'msg_flags',
+]
+struct_msghdr._fields_ = [
+    ('msg_name', POINTER(None)),
+    ('msg_namelen', socklen_t),
+    ('msg_iov', POINTER(struct_iovec)),
+    ('msg_iovlen', c_int),
+    ('__pad1', c_int),
+    ('msg_control', POINTER(None)),
+    ('msg_controllen', socklen_t),
+    ('__pad2', c_int),
+    ('msg_flags', c_int),
+]
+
+# /usr/include/sys/socket.h: 44
+class struct_cmsghdr(Structure):
+    pass
+
+struct_cmsghdr.__slots__ = [
+    'cmsg_len',
+    '__pad1',
+    'cmsg_level',
+    'cmsg_type',
+]
+struct_cmsghdr._fields_ = [
+    ('cmsg_len', socklen_t),
+    ('__pad1', c_int),
+    ('cmsg_level', c_int),
+    ('cmsg_type', c_int),
+]
+
+# /usr/include/sys/socket.h: 74
+class struct_linger(Structure):
+    pass
+
+struct_linger.__slots__ = [
+    'l_onoff',
+    'l_linger',
+]
+struct_linger._fields_ = [
+    ('l_onoff', c_int),
+    ('l_linger', c_int),
+]
+
+# /usr/include/sys/socket.h: 369
+class struct_sockaddr(Structure):
+    pass
+
+struct_sockaddr.__slots__ = [
+    'sa_family',
+    'sa_data',
+]
+struct_sockaddr._fields_ = [
+    ('sa_family', sa_family_t),
+    ('sa_data', c_char * int(14)),
+]
+
+# /usr/include/sys/socket.h: 374
+class struct_sockaddr_storage(Structure):
+    pass
+
+struct_sockaddr_storage.__slots__ = [
+    'ss_family',
+    '__ss_padding',
+    '__ss_align',
+]
+struct_sockaddr_storage._fields_ = [
+    ('ss_family', sa_family_t),
+    ('__ss_padding', c_char * int(((128 - sizeof(c_long)) - sizeof(sa_family_t)))),
+    ('__ss_align', c_ulong),
+]
+
+# /usr/include/sys/socket.h: 380
+if _libs["libguac"].has("socket", "cdecl"):
+    socket = _libs["libguac"].get("socket", "cdecl")
+    socket.argtypes = [c_int, c_int, c_int]
+    socket.restype = c_int
+
+# /usr/include/sys/socket.h: 381
+if _libs["libguac"].has("socketpair", "cdecl"):
+    socketpair = _libs["libguac"].get("socketpair", "cdecl")
+    socketpair.argtypes = [c_int, c_int, c_int, c_int * int(2)]
+    socketpair.restype = c_int
+
+# /usr/include/sys/socket.h: 383
+if _libs["libguac"].has("shutdown", "cdecl"):
+    shutdown = _libs["libguac"].get("shutdown", "cdecl")
+    shutdown.argtypes = [c_int, c_int]
+    shutdown.restype = c_int
+
+# /usr/include/sys/socket.h: 385
+if _libs["libguac"].has("bind", "cdecl"):
+    bind = _libs["libguac"].get("bind", "cdecl")
+    bind.argtypes = [c_int, POINTER(struct_sockaddr), socklen_t]
+    bind.restype = c_int
+
+# /usr/include/sys/socket.h: 386
+if _libs["libguac"].has("connect", "cdecl"):
+    connect = _libs["libguac"].get("connect", "cdecl")
+    connect.argtypes = [c_int, POINTER(struct_sockaddr), socklen_t]
+    connect.restype = c_int
+
+# /usr/include/sys/socket.h: 387
+if _libs["libguac"].has("listen", "cdecl"):
+    listen = _libs["libguac"].get("listen", "cdecl")
+    listen.argtypes = [c_int, c_int]
+    listen.restype = c_int
+
+# /usr/include/sys/socket.h: 388
+if _libs["libguac"].has("accept", "cdecl"):
+    accept = _libs["libguac"].get("accept", "cdecl")
+    accept.argtypes = [c_int, POINTER(struct_sockaddr), POINTER(socklen_t)]
+    accept.restype = c_int
+
+# /usr/include/sys/socket.h: 389
+if _libs["libguac"].has("accept4", "cdecl"):
+    accept4 = _libs["libguac"].get("accept4", "cdecl")
+    accept4.argtypes = [c_int, POINTER(struct_sockaddr), POINTER(socklen_t), c_int]
+    accept4.restype = c_int
+
+# /usr/include/sys/socket.h: 391
+if _libs["libguac"].has("getsockname", "cdecl"):
+    getsockname = _libs["libguac"].get("getsockname", "cdecl")
+    getsockname.argtypes = [c_int, POINTER(struct_sockaddr), POINTER(socklen_t)]
+    getsockname.restype = c_int
+
+# /usr/include/sys/socket.h: 392
+if _libs["libguac"].has("getpeername", "cdecl"):
+    getpeername = _libs["libguac"].get("getpeername", "cdecl")
+    getpeername.argtypes = [c_int, POINTER(struct_sockaddr), POINTER(socklen_t)]
+    getpeername.restype = c_int
+
+# /usr/include/sys/socket.h: 394
+if _libs["libguac"].has("send", "cdecl"):
+    send = _libs["libguac"].get("send", "cdecl")
+    send.argtypes = [c_int, POINTER(None), c_size_t, c_int]
+    send.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 395
+if _libs["libguac"].has("recv", "cdecl"):
+    recv = _libs["libguac"].get("recv", "cdecl")
+    recv.argtypes = [c_int, POINTER(None), c_size_t, c_int]
+    recv.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 396
+if _libs["libguac"].has("sendto", "cdecl"):
+    sendto = _libs["libguac"].get("sendto", "cdecl")
+    sendto.argtypes = [c_int, POINTER(None), c_size_t, c_int, POINTER(struct_sockaddr), socklen_t]
+    sendto.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 397
+if _libs["libguac"].has("recvfrom", "cdecl"):
+    recvfrom = _libs["libguac"].get("recvfrom", "cdecl")
+    recvfrom.argtypes = [c_int, POINTER(None), c_size_t, c_int, POINTER(struct_sockaddr), POINTER(socklen_t)]
+    recvfrom.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 398
+if _libs["libguac"].has("sendmsg", "cdecl"):
+    sendmsg = _libs["libguac"].get("sendmsg", "cdecl")
+    sendmsg.argtypes = [c_int, POINTER(struct_msghdr), c_int]
+    sendmsg.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 399
+if _libs["libguac"].has("recvmsg", "cdecl"):
+    recvmsg = _libs["libguac"].get("recvmsg", "cdecl")
+    recvmsg.argtypes = [c_int, POINTER(struct_msghdr), c_int]
+    recvmsg.restype = c_ptrdiff_t
+
+# /usr/include/sys/socket.h: 401
+if _libs["libguac"].has("getsockopt", "cdecl"):
+    getsockopt = _libs["libguac"].get("getsockopt", "cdecl")
+    getsockopt.argtypes = [c_int, c_int, c_int, POINTER(None), POINTER(socklen_t)]
+    getsockopt.restype = c_int
+
+# /usr/include/sys/socket.h: 402
+if _libs["libguac"].has("setsockopt", "cdecl"):
+    setsockopt = _libs["libguac"].get("setsockopt", "cdecl")
+    setsockopt.argtypes = [c_int, c_int, c_int, POINTER(None), socklen_t]
+    setsockopt.restype = c_int
+
+# /usr/include/sys/socket.h: 404
+if _libs["libguac"].has("sockatmark", "cdecl"):
+    sockatmark = _libs["libguac"].get("sockatmark", "cdecl")
+    sockatmark.argtypes = [c_int]
+    sockatmark.restype = c_int
+
+# /usr/include/czmq_library.h: 108
+class struct__zsock_t(Structure):
+    pass
+
+zsock_t = struct__zsock_t# /usr/include/czmq_library.h: 108
+
+# /tmp/guacamole-server/src/libguac/guacamole/socket-zmq.h: 32
+if _libs["libguac"].has("guac_socket_open_zmq", "cdecl"):
+    guac_socket_open_zmq = _libs["libguac"].get("guac_socket_open_zmq", "cdecl")
+    guac_socket_open_zmq.argtypes = [zsock_t]
+    guac_socket_open_zmq.restype = POINTER(guac_socket)
+
+# /tmp/guacamole-server/src/libguac/guacamole/socket-zmq.h: 67
+if _libs["libguac"].has("guac_socket_create_zmq", "cdecl"):
+    guac_socket_create_zmq = _libs["libguac"].get("guac_socket_create_zmq", "cdecl")
+    guac_socket_create_zmq.argtypes = [c_int, String, c_bool]
+    guac_socket_create_zmq.restype = POINTER(guac_socket)
+
 struct_guac_user_info.__slots__ = [
     'optimal_width',
     'optimal_height',
@@ -2532,39 +2710,1459 @@ if _libs["libguac"].has("guac_user_parse_args_boolean", "cdecl"):
     guac_user_parse_args_boolean.argtypes = [POINTER(guac_user), POINTER(POINTER(c_char)), POINTER(POINTER(c_char)), c_int, c_int]
     guac_user_parse_args_boolean.restype = c_int
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 46
+# /tmp/guacamole-server/src/libguac/guacamole/error.h: 51
 try:
     guac_error = ((__guac_error ())[0])
 except:
     pass
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 59
+# /tmp/guacamole-server/src/libguac/guacamole/error.h: 64
 try:
     guac_error_message = ((__guac_error_message ())[0])
 except:
     pass
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 76
+# /usr/include/sys/socket.h: 79
 try:
-    guac_error = ((__guac_error ())[0])
+    SHUT_RD = 0
 except:
     pass
 
-# /tmp/guacamole-server/src/libguac/guacamole/error.h: 89
+# /usr/include/sys/socket.h: 80
 try:
-    guac_error_message = ((__guac_error_message ())[0])
+    SHUT_WR = 1
 except:
     pass
 
-# /tmp/guacamole-server/src/libguac/guacamole/mem.h: 394
-def guac_mem_free(mem):
-    return (PRIV_guac_mem_free (mem))
+# /usr/include/sys/socket.h: 81
+try:
+    SHUT_RDWR = 2
+except:
+    pass
 
-# /tmp/guacamole-server/src/libguac/guacamole/mem.h: 410
-def guac_mem_free_const(mem):
-    return (PRIV_guac_mem_free (cast(mem, POINTER(None))))
+# /usr/include/sys/socket.h: 84
+try:
+    SOCK_STREAM = 1
+except:
+    pass
 
-guac_client = struct_guac_client# /tmp/guacamole-server/src/libguac/guacamole/client.h: 48
+# /usr/include/sys/socket.h: 85
+try:
+    SOCK_DGRAM = 2
+except:
+    pass
+
+# /usr/include/sys/socket.h: 88
+try:
+    SOCK_RAW = 3
+except:
+    pass
+
+# /usr/include/sys/socket.h: 89
+try:
+    SOCK_RDM = 4
+except:
+    pass
+
+# /usr/include/sys/socket.h: 90
+try:
+    SOCK_SEQPACKET = 5
+except:
+    pass
+
+# /usr/include/sys/socket.h: 91
+try:
+    SOCK_DCCP = 6
+except:
+    pass
+
+# /usr/include/sys/socket.h: 92
+try:
+    SOCK_PACKET = 10
+except:
+    pass
+
+# /usr/include/sys/socket.h: 95
+try:
+    SOCK_CLOEXEC = 0o2000000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 96
+try:
+    SOCK_NONBLOCK = 0o4000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 99
+try:
+    PF_UNSPEC = 0
+except:
+    pass
+
+# /usr/include/sys/socket.h: 100
+try:
+    PF_LOCAL = 1
+except:
+    pass
+
+# /usr/include/sys/socket.h: 101
+try:
+    PF_UNIX = PF_LOCAL
+except:
+    pass
+
+# /usr/include/sys/socket.h: 102
+try:
+    PF_FILE = PF_LOCAL
+except:
+    pass
+
+# /usr/include/sys/socket.h: 103
+try:
+    PF_INET = 2
+except:
+    pass
+
+# /usr/include/sys/socket.h: 104
+try:
+    PF_AX25 = 3
+except:
+    pass
+
+# /usr/include/sys/socket.h: 105
+try:
+    PF_IPX = 4
+except:
+    pass
+
+# /usr/include/sys/socket.h: 106
+try:
+    PF_APPLETALK = 5
+except:
+    pass
+
+# /usr/include/sys/socket.h: 107
+try:
+    PF_NETROM = 6
+except:
+    pass
+
+# /usr/include/sys/socket.h: 108
+try:
+    PF_BRIDGE = 7
+except:
+    pass
+
+# /usr/include/sys/socket.h: 109
+try:
+    PF_ATMPVC = 8
+except:
+    pass
+
+# /usr/include/sys/socket.h: 110
+try:
+    PF_X25 = 9
+except:
+    pass
+
+# /usr/include/sys/socket.h: 111
+try:
+    PF_INET6 = 10
+except:
+    pass
+
+# /usr/include/sys/socket.h: 112
+try:
+    PF_ROSE = 11
+except:
+    pass
+
+# /usr/include/sys/socket.h: 113
+try:
+    PF_DECnet = 12
+except:
+    pass
+
+# /usr/include/sys/socket.h: 114
+try:
+    PF_NETBEUI = 13
+except:
+    pass
+
+# /usr/include/sys/socket.h: 115
+try:
+    PF_SECURITY = 14
+except:
+    pass
+
+# /usr/include/sys/socket.h: 116
+try:
+    PF_KEY = 15
+except:
+    pass
+
+# /usr/include/sys/socket.h: 117
+try:
+    PF_NETLINK = 16
+except:
+    pass
+
+# /usr/include/sys/socket.h: 118
+try:
+    PF_ROUTE = PF_NETLINK
+except:
+    pass
+
+# /usr/include/sys/socket.h: 119
+try:
+    PF_PACKET = 17
+except:
+    pass
+
+# /usr/include/sys/socket.h: 120
+try:
+    PF_ASH = 18
+except:
+    pass
+
+# /usr/include/sys/socket.h: 121
+try:
+    PF_ECONET = 19
+except:
+    pass
+
+# /usr/include/sys/socket.h: 122
+try:
+    PF_ATMSVC = 20
+except:
+    pass
+
+# /usr/include/sys/socket.h: 123
+try:
+    PF_RDS = 21
+except:
+    pass
+
+# /usr/include/sys/socket.h: 124
+try:
+    PF_SNA = 22
+except:
+    pass
+
+# /usr/include/sys/socket.h: 125
+try:
+    PF_IRDA = 23
+except:
+    pass
+
+# /usr/include/sys/socket.h: 126
+try:
+    PF_PPPOX = 24
+except:
+    pass
+
+# /usr/include/sys/socket.h: 127
+try:
+    PF_WANPIPE = 25
+except:
+    pass
+
+# /usr/include/sys/socket.h: 128
+try:
+    PF_LLC = 26
+except:
+    pass
+
+# /usr/include/sys/socket.h: 129
+try:
+    PF_IB = 27
+except:
+    pass
+
+# /usr/include/sys/socket.h: 130
+try:
+    PF_MPLS = 28
+except:
+    pass
+
+# /usr/include/sys/socket.h: 131
+try:
+    PF_CAN = 29
+except:
+    pass
+
+# /usr/include/sys/socket.h: 132
+try:
+    PF_TIPC = 30
+except:
+    pass
+
+# /usr/include/sys/socket.h: 133
+try:
+    PF_BLUETOOTH = 31
+except:
+    pass
+
+# /usr/include/sys/socket.h: 134
+try:
+    PF_IUCV = 32
+except:
+    pass
+
+# /usr/include/sys/socket.h: 135
+try:
+    PF_RXRPC = 33
+except:
+    pass
+
+# /usr/include/sys/socket.h: 136
+try:
+    PF_ISDN = 34
+except:
+    pass
+
+# /usr/include/sys/socket.h: 137
+try:
+    PF_PHONET = 35
+except:
+    pass
+
+# /usr/include/sys/socket.h: 138
+try:
+    PF_IEEE802154 = 36
+except:
+    pass
+
+# /usr/include/sys/socket.h: 139
+try:
+    PF_CAIF = 37
+except:
+    pass
+
+# /usr/include/sys/socket.h: 140
+try:
+    PF_ALG = 38
+except:
+    pass
+
+# /usr/include/sys/socket.h: 141
+try:
+    PF_NFC = 39
+except:
+    pass
+
+# /usr/include/sys/socket.h: 142
+try:
+    PF_VSOCK = 40
+except:
+    pass
+
+# /usr/include/sys/socket.h: 143
+try:
+    PF_KCM = 41
+except:
+    pass
+
+# /usr/include/sys/socket.h: 144
+try:
+    PF_QIPCRTR = 42
+except:
+    pass
+
+# /usr/include/sys/socket.h: 145
+try:
+    PF_SMC = 43
+except:
+    pass
+
+# /usr/include/sys/socket.h: 146
+try:
+    PF_XDP = 44
+except:
+    pass
+
+# /usr/include/sys/socket.h: 147
+try:
+    PF_MAX = 45
+except:
+    pass
+
+# /usr/include/sys/socket.h: 149
+try:
+    AF_UNSPEC = PF_UNSPEC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 150
+try:
+    AF_LOCAL = PF_LOCAL
+except:
+    pass
+
+# /usr/include/sys/socket.h: 151
+try:
+    AF_UNIX = AF_LOCAL
+except:
+    pass
+
+# /usr/include/sys/socket.h: 152
+try:
+    AF_FILE = AF_LOCAL
+except:
+    pass
+
+# /usr/include/sys/socket.h: 153
+try:
+    AF_INET = PF_INET
+except:
+    pass
+
+# /usr/include/sys/socket.h: 154
+try:
+    AF_AX25 = PF_AX25
+except:
+    pass
+
+# /usr/include/sys/socket.h: 155
+try:
+    AF_IPX = PF_IPX
+except:
+    pass
+
+# /usr/include/sys/socket.h: 156
+try:
+    AF_APPLETALK = PF_APPLETALK
+except:
+    pass
+
+# /usr/include/sys/socket.h: 157
+try:
+    AF_NETROM = PF_NETROM
+except:
+    pass
+
+# /usr/include/sys/socket.h: 158
+try:
+    AF_BRIDGE = PF_BRIDGE
+except:
+    pass
+
+# /usr/include/sys/socket.h: 159
+try:
+    AF_ATMPVC = PF_ATMPVC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 160
+try:
+    AF_X25 = PF_X25
+except:
+    pass
+
+# /usr/include/sys/socket.h: 161
+try:
+    AF_INET6 = PF_INET6
+except:
+    pass
+
+# /usr/include/sys/socket.h: 162
+try:
+    AF_ROSE = PF_ROSE
+except:
+    pass
+
+# /usr/include/sys/socket.h: 163
+try:
+    AF_DECnet = PF_DECnet
+except:
+    pass
+
+# /usr/include/sys/socket.h: 164
+try:
+    AF_NETBEUI = PF_NETBEUI
+except:
+    pass
+
+# /usr/include/sys/socket.h: 165
+try:
+    AF_SECURITY = PF_SECURITY
+except:
+    pass
+
+# /usr/include/sys/socket.h: 166
+try:
+    AF_KEY = PF_KEY
+except:
+    pass
+
+# /usr/include/sys/socket.h: 167
+try:
+    AF_NETLINK = PF_NETLINK
+except:
+    pass
+
+# /usr/include/sys/socket.h: 168
+try:
+    AF_ROUTE = PF_ROUTE
+except:
+    pass
+
+# /usr/include/sys/socket.h: 169
+try:
+    AF_PACKET = PF_PACKET
+except:
+    pass
+
+# /usr/include/sys/socket.h: 170
+try:
+    AF_ASH = PF_ASH
+except:
+    pass
+
+# /usr/include/sys/socket.h: 171
+try:
+    AF_ECONET = PF_ECONET
+except:
+    pass
+
+# /usr/include/sys/socket.h: 172
+try:
+    AF_ATMSVC = PF_ATMSVC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 173
+try:
+    AF_RDS = PF_RDS
+except:
+    pass
+
+# /usr/include/sys/socket.h: 174
+try:
+    AF_SNA = PF_SNA
+except:
+    pass
+
+# /usr/include/sys/socket.h: 175
+try:
+    AF_IRDA = PF_IRDA
+except:
+    pass
+
+# /usr/include/sys/socket.h: 176
+try:
+    AF_PPPOX = PF_PPPOX
+except:
+    pass
+
+# /usr/include/sys/socket.h: 177
+try:
+    AF_WANPIPE = PF_WANPIPE
+except:
+    pass
+
+# /usr/include/sys/socket.h: 178
+try:
+    AF_LLC = PF_LLC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 179
+try:
+    AF_IB = PF_IB
+except:
+    pass
+
+# /usr/include/sys/socket.h: 180
+try:
+    AF_MPLS = PF_MPLS
+except:
+    pass
+
+# /usr/include/sys/socket.h: 181
+try:
+    AF_CAN = PF_CAN
+except:
+    pass
+
+# /usr/include/sys/socket.h: 182
+try:
+    AF_TIPC = PF_TIPC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 183
+try:
+    AF_BLUETOOTH = PF_BLUETOOTH
+except:
+    pass
+
+# /usr/include/sys/socket.h: 184
+try:
+    AF_IUCV = PF_IUCV
+except:
+    pass
+
+# /usr/include/sys/socket.h: 185
+try:
+    AF_RXRPC = PF_RXRPC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 186
+try:
+    AF_ISDN = PF_ISDN
+except:
+    pass
+
+# /usr/include/sys/socket.h: 187
+try:
+    AF_PHONET = PF_PHONET
+except:
+    pass
+
+# /usr/include/sys/socket.h: 188
+try:
+    AF_IEEE802154 = PF_IEEE802154
+except:
+    pass
+
+# /usr/include/sys/socket.h: 189
+try:
+    AF_CAIF = PF_CAIF
+except:
+    pass
+
+# /usr/include/sys/socket.h: 190
+try:
+    AF_ALG = PF_ALG
+except:
+    pass
+
+# /usr/include/sys/socket.h: 191
+try:
+    AF_NFC = PF_NFC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 192
+try:
+    AF_VSOCK = PF_VSOCK
+except:
+    pass
+
+# /usr/include/sys/socket.h: 193
+try:
+    AF_KCM = PF_KCM
+except:
+    pass
+
+# /usr/include/sys/socket.h: 194
+try:
+    AF_QIPCRTR = PF_QIPCRTR
+except:
+    pass
+
+# /usr/include/sys/socket.h: 195
+try:
+    AF_SMC = PF_SMC
+except:
+    pass
+
+# /usr/include/sys/socket.h: 196
+try:
+    AF_XDP = PF_XDP
+except:
+    pass
+
+# /usr/include/sys/socket.h: 197
+try:
+    AF_MAX = PF_MAX
+except:
+    pass
+
+# /usr/include/sys/socket.h: 200
+try:
+    SO_DEBUG = 1
+except:
+    pass
+
+# /usr/include/sys/socket.h: 201
+try:
+    SO_REUSEADDR = 2
+except:
+    pass
+
+# /usr/include/sys/socket.h: 202
+try:
+    SO_TYPE = 3
+except:
+    pass
+
+# /usr/include/sys/socket.h: 203
+try:
+    SO_ERROR = 4
+except:
+    pass
+
+# /usr/include/sys/socket.h: 204
+try:
+    SO_DONTROUTE = 5
+except:
+    pass
+
+# /usr/include/sys/socket.h: 205
+try:
+    SO_BROADCAST = 6
+except:
+    pass
+
+# /usr/include/sys/socket.h: 206
+try:
+    SO_SNDBUF = 7
+except:
+    pass
+
+# /usr/include/sys/socket.h: 207
+try:
+    SO_RCVBUF = 8
+except:
+    pass
+
+# /usr/include/sys/socket.h: 208
+try:
+    SO_KEEPALIVE = 9
+except:
+    pass
+
+# /usr/include/sys/socket.h: 209
+try:
+    SO_OOBINLINE = 10
+except:
+    pass
+
+# /usr/include/sys/socket.h: 210
+try:
+    SO_NO_CHECK = 11
+except:
+    pass
+
+# /usr/include/sys/socket.h: 211
+try:
+    SO_PRIORITY = 12
+except:
+    pass
+
+# /usr/include/sys/socket.h: 212
+try:
+    SO_LINGER = 13
+except:
+    pass
+
+# /usr/include/sys/socket.h: 213
+try:
+    SO_BSDCOMPAT = 14
+except:
+    pass
+
+# /usr/include/sys/socket.h: 214
+try:
+    SO_REUSEPORT = 15
+except:
+    pass
+
+# /usr/include/sys/socket.h: 215
+try:
+    SO_PASSCRED = 16
+except:
+    pass
+
+# /usr/include/sys/socket.h: 216
+try:
+    SO_PEERCRED = 17
+except:
+    pass
+
+# /usr/include/sys/socket.h: 217
+try:
+    SO_RCVLOWAT = 18
+except:
+    pass
+
+# /usr/include/sys/socket.h: 218
+try:
+    SO_SNDLOWAT = 19
+except:
+    pass
+
+# /usr/include/sys/socket.h: 219
+try:
+    SO_ACCEPTCONN = 30
+except:
+    pass
+
+# /usr/include/sys/socket.h: 220
+try:
+    SO_PEERSEC = 31
+except:
+    pass
+
+# /usr/include/sys/socket.h: 221
+try:
+    SO_SNDBUFFORCE = 32
+except:
+    pass
+
+# /usr/include/sys/socket.h: 222
+try:
+    SO_RCVBUFFORCE = 33
+except:
+    pass
+
+# /usr/include/sys/socket.h: 223
+try:
+    SO_PROTOCOL = 38
+except:
+    pass
+
+# /usr/include/sys/socket.h: 224
+try:
+    SO_DOMAIN = 39
+except:
+    pass
+
+# /usr/include/sys/socket.h: 232
+try:
+    SO_RCVTIMEO = 20
+except:
+    pass
+
+# /usr/include/sys/socket.h: 233
+try:
+    SO_SNDTIMEO = 21
+except:
+    pass
+
+# /usr/include/sys/socket.h: 243
+try:
+    SO_TIMESTAMP = 29
+except:
+    pass
+
+# /usr/include/sys/socket.h: 244
+try:
+    SO_TIMESTAMPNS = 35
+except:
+    pass
+
+# /usr/include/sys/socket.h: 245
+try:
+    SO_TIMESTAMPING = 37
+except:
+    pass
+
+# /usr/include/sys/socket.h: 249
+try:
+    SO_SECURITY_AUTHENTICATION = 22
+except:
+    pass
+
+# /usr/include/sys/socket.h: 250
+try:
+    SO_SECURITY_ENCRYPTION_TRANSPORT = 23
+except:
+    pass
+
+# /usr/include/sys/socket.h: 251
+try:
+    SO_SECURITY_ENCRYPTION_NETWORK = 24
+except:
+    pass
+
+# /usr/include/sys/socket.h: 253
+try:
+    SO_BINDTODEVICE = 25
+except:
+    pass
+
+# /usr/include/sys/socket.h: 255
+try:
+    SO_ATTACH_FILTER = 26
+except:
+    pass
+
+# /usr/include/sys/socket.h: 256
+try:
+    SO_DETACH_FILTER = 27
+except:
+    pass
+
+# /usr/include/sys/socket.h: 257
+try:
+    SO_GET_FILTER = SO_ATTACH_FILTER
+except:
+    pass
+
+# /usr/include/sys/socket.h: 259
+try:
+    SO_PEERNAME = 28
+except:
+    pass
+
+# /usr/include/sys/socket.h: 260
+try:
+    SCM_TIMESTAMP = SO_TIMESTAMP
+except:
+    pass
+
+# /usr/include/sys/socket.h: 261
+try:
+    SO_PASSSEC = 34
+except:
+    pass
+
+# /usr/include/sys/socket.h: 262
+try:
+    SCM_TIMESTAMPNS = SO_TIMESTAMPNS
+except:
+    pass
+
+# /usr/include/sys/socket.h: 263
+try:
+    SO_MARK = 36
+except:
+    pass
+
+# /usr/include/sys/socket.h: 264
+try:
+    SCM_TIMESTAMPING = SO_TIMESTAMPING
+except:
+    pass
+
+# /usr/include/sys/socket.h: 265
+try:
+    SO_RXQ_OVFL = 40
+except:
+    pass
+
+# /usr/include/sys/socket.h: 266
+try:
+    SO_WIFI_STATUS = 41
+except:
+    pass
+
+# /usr/include/sys/socket.h: 267
+try:
+    SCM_WIFI_STATUS = SO_WIFI_STATUS
+except:
+    pass
+
+# /usr/include/sys/socket.h: 268
+try:
+    SO_PEEK_OFF = 42
+except:
+    pass
+
+# /usr/include/sys/socket.h: 269
+try:
+    SO_NOFCS = 43
+except:
+    pass
+
+# /usr/include/sys/socket.h: 270
+try:
+    SO_LOCK_FILTER = 44
+except:
+    pass
+
+# /usr/include/sys/socket.h: 271
+try:
+    SO_SELECT_ERR_QUEUE = 45
+except:
+    pass
+
+# /usr/include/sys/socket.h: 272
+try:
+    SO_BUSY_POLL = 46
+except:
+    pass
+
+# /usr/include/sys/socket.h: 273
+try:
+    SO_MAX_PACING_RATE = 47
+except:
+    pass
+
+# /usr/include/sys/socket.h: 274
+try:
+    SO_BPF_EXTENSIONS = 48
+except:
+    pass
+
+# /usr/include/sys/socket.h: 275
+try:
+    SO_INCOMING_CPU = 49
+except:
+    pass
+
+# /usr/include/sys/socket.h: 276
+try:
+    SO_ATTACH_BPF = 50
+except:
+    pass
+
+# /usr/include/sys/socket.h: 277
+try:
+    SO_DETACH_BPF = SO_DETACH_FILTER
+except:
+    pass
+
+# /usr/include/sys/socket.h: 278
+try:
+    SO_ATTACH_REUSEPORT_CBPF = 51
+except:
+    pass
+
+# /usr/include/sys/socket.h: 279
+try:
+    SO_ATTACH_REUSEPORT_EBPF = 52
+except:
+    pass
+
+# /usr/include/sys/socket.h: 280
+try:
+    SO_CNX_ADVICE = 53
+except:
+    pass
+
+# /usr/include/sys/socket.h: 281
+try:
+    SCM_TIMESTAMPING_OPT_STATS = 54
+except:
+    pass
+
+# /usr/include/sys/socket.h: 282
+try:
+    SO_MEMINFO = 55
+except:
+    pass
+
+# /usr/include/sys/socket.h: 283
+try:
+    SO_INCOMING_NAPI_ID = 56
+except:
+    pass
+
+# /usr/include/sys/socket.h: 284
+try:
+    SO_COOKIE = 57
+except:
+    pass
+
+# /usr/include/sys/socket.h: 285
+try:
+    SCM_TIMESTAMPING_PKTINFO = 58
+except:
+    pass
+
+# /usr/include/sys/socket.h: 286
+try:
+    SO_PEERGROUPS = 59
+except:
+    pass
+
+# /usr/include/sys/socket.h: 287
+try:
+    SO_ZEROCOPY = 60
+except:
+    pass
+
+# /usr/include/sys/socket.h: 288
+try:
+    SO_TXTIME = 61
+except:
+    pass
+
+# /usr/include/sys/socket.h: 289
+try:
+    SCM_TXTIME = SO_TXTIME
+except:
+    pass
+
+# /usr/include/sys/socket.h: 290
+try:
+    SO_BINDTOIFINDEX = 62
+except:
+    pass
+
+# /usr/include/sys/socket.h: 291
+try:
+    SO_DETACH_REUSEPORT_BPF = 68
+except:
+    pass
+
+# /usr/include/sys/socket.h: 292
+try:
+    SO_PREFER_BUSY_POLL = 69
+except:
+    pass
+
+# /usr/include/sys/socket.h: 293
+try:
+    SO_BUSY_POLL_BUDGET = 70
+except:
+    pass
+
+# /usr/include/sys/socket.h: 296
+try:
+    SOL_SOCKET = 1
+except:
+    pass
+
+# /usr/include/sys/socket.h: 299
+try:
+    SOL_IP = 0
+except:
+    pass
+
+# /usr/include/sys/socket.h: 300
+try:
+    SOL_IPV6 = 41
+except:
+    pass
+
+# /usr/include/sys/socket.h: 301
+try:
+    SOL_ICMPV6 = 58
+except:
+    pass
+
+# /usr/include/sys/socket.h: 303
+try:
+    SOL_RAW = 255
+except:
+    pass
+
+# /usr/include/sys/socket.h: 304
+try:
+    SOL_DECNET = 261
+except:
+    pass
+
+# /usr/include/sys/socket.h: 305
+try:
+    SOL_X25 = 262
+except:
+    pass
+
+# /usr/include/sys/socket.h: 306
+try:
+    SOL_PACKET = 263
+except:
+    pass
+
+# /usr/include/sys/socket.h: 307
+try:
+    SOL_ATM = 264
+except:
+    pass
+
+# /usr/include/sys/socket.h: 308
+try:
+    SOL_AAL = 265
+except:
+    pass
+
+# /usr/include/sys/socket.h: 309
+try:
+    SOL_IRDA = 266
+except:
+    pass
+
+# /usr/include/sys/socket.h: 310
+try:
+    SOL_NETBEUI = 267
+except:
+    pass
+
+# /usr/include/sys/socket.h: 311
+try:
+    SOL_LLC = 268
+except:
+    pass
+
+# /usr/include/sys/socket.h: 312
+try:
+    SOL_DCCP = 269
+except:
+    pass
+
+# /usr/include/sys/socket.h: 313
+try:
+    SOL_NETLINK = 270
+except:
+    pass
+
+# /usr/include/sys/socket.h: 314
+try:
+    SOL_TIPC = 271
+except:
+    pass
+
+# /usr/include/sys/socket.h: 315
+try:
+    SOL_RXRPC = 272
+except:
+    pass
+
+# /usr/include/sys/socket.h: 316
+try:
+    SOL_PPPOL2TP = 273
+except:
+    pass
+
+# /usr/include/sys/socket.h: 317
+try:
+    SOL_BLUETOOTH = 274
+except:
+    pass
+
+# /usr/include/sys/socket.h: 318
+try:
+    SOL_PNPIPE = 275
+except:
+    pass
+
+# /usr/include/sys/socket.h: 319
+try:
+    SOL_RDS = 276
+except:
+    pass
+
+# /usr/include/sys/socket.h: 320
+try:
+    SOL_IUCV = 277
+except:
+    pass
+
+# /usr/include/sys/socket.h: 321
+try:
+    SOL_CAIF = 278
+except:
+    pass
+
+# /usr/include/sys/socket.h: 322
+try:
+    SOL_ALG = 279
+except:
+    pass
+
+# /usr/include/sys/socket.h: 323
+try:
+    SOL_NFC = 280
+except:
+    pass
+
+# /usr/include/sys/socket.h: 324
+try:
+    SOL_KCM = 281
+except:
+    pass
+
+# /usr/include/sys/socket.h: 325
+try:
+    SOL_TLS = 282
+except:
+    pass
+
+# /usr/include/sys/socket.h: 326
+try:
+    SOL_XDP = 283
+except:
+    pass
+
+# /usr/include/sys/socket.h: 328
+try:
+    SOMAXCONN = 128
+except:
+    pass
+
+# /usr/include/sys/socket.h: 330
+try:
+    MSG_OOB = 0x0001
+except:
+    pass
+
+# /usr/include/sys/socket.h: 331
+try:
+    MSG_PEEK = 0x0002
+except:
+    pass
+
+# /usr/include/sys/socket.h: 332
+try:
+    MSG_DONTROUTE = 0x0004
+except:
+    pass
+
+# /usr/include/sys/socket.h: 333
+try:
+    MSG_CTRUNC = 0x0008
+except:
+    pass
+
+# /usr/include/sys/socket.h: 334
+try:
+    MSG_PROXY = 0x0010
+except:
+    pass
+
+# /usr/include/sys/socket.h: 335
+try:
+    MSG_TRUNC = 0x0020
+except:
+    pass
+
+# /usr/include/sys/socket.h: 336
+try:
+    MSG_DONTWAIT = 0x0040
+except:
+    pass
+
+# /usr/include/sys/socket.h: 337
+try:
+    MSG_EOR = 0x0080
+except:
+    pass
+
+# /usr/include/sys/socket.h: 338
+try:
+    MSG_WAITALL = 0x0100
+except:
+    pass
+
+# /usr/include/sys/socket.h: 339
+try:
+    MSG_FIN = 0x0200
+except:
+    pass
+
+# /usr/include/sys/socket.h: 340
+try:
+    MSG_SYN = 0x0400
+except:
+    pass
+
+# /usr/include/sys/socket.h: 341
+try:
+    MSG_CONFIRM = 0x0800
+except:
+    pass
+
+# /usr/include/sys/socket.h: 342
+try:
+    MSG_RST = 0x1000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 343
+try:
+    MSG_ERRQUEUE = 0x2000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 344
+try:
+    MSG_NOSIGNAL = 0x4000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 345
+try:
+    MSG_MORE = 0x8000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 346
+try:
+    MSG_WAITFORONE = 0x10000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 347
+try:
+    MSG_BATCH = 0x40000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 348
+try:
+    MSG_ZEROCOPY = 0x4000000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 349
+try:
+    MSG_FASTOPEN = 0x20000000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 350
+try:
+    MSG_CMSG_CLOEXEC = 0x40000000
+except:
+    pass
+
+# /usr/include/sys/socket.h: 352
+def __CMSG_LEN(cmsg):
+    return (((((cmsg.contents.cmsg_len).value) + sizeof(c_long)) - 1) & (~(c_long (ord_if_char((sizeof(c_long) - 1)))).value))
+
+# /usr/include/sys/socket.h: 353
+def __CMSG_NEXT(cmsg):
+    return (cast(cmsg, POINTER(c_ubyte)) + (__CMSG_LEN (cmsg)))
+
+# /usr/include/sys/socket.h: 354
+def __MHDR_END(mhdr):
+    return (cast((mhdr.contents.msg_control), POINTER(c_ubyte)) + ((mhdr.contents.msg_controllen).value))
+
+# /usr/include/sys/socket.h: 356
+def CMSG_DATA(cmsg):
+    return cast((cast(cmsg, POINTER(struct_cmsghdr)) + 1), POINTER(c_ubyte))
+
+# /usr/include/sys/socket.h: 357
+def CMSG_NXTHDR(mhdr, cmsg):
+    return ((((cmsg.contents.cmsg_len).value) < sizeof(struct_cmsghdr)) or (((__CMSG_LEN (cmsg)) + sizeof(struct_cmsghdr)) >= ((__MHDR_END (mhdr)) - cast(cmsg, POINTER(c_ubyte))))) and 0 or cast((__CMSG_NEXT (cmsg)), POINTER(struct_cmsghdr))
+
+# /usr/include/sys/socket.h: 360
+def CMSG_FIRSTHDR(mhdr):
+    return ((c_size_t (ord_if_char(((mhdr.contents.msg_controllen).value)))).value >= sizeof(struct_cmsghdr)) and cast((mhdr.contents.msg_control), POINTER(struct_cmsghdr)) or cast(0, POINTER(struct_cmsghdr))
+
+# /usr/include/sys/socket.h: 362
+def CMSG_ALIGN(len):
+    return (((len + sizeof(c_size_t)) - 1) & (c_size_t (ord_if_char((~(sizeof(c_size_t) - 1))))).value)
+
+# /usr/include/sys/socket.h: 363
+def CMSG_SPACE(len):
+    return ((CMSG_ALIGN (len)) + (CMSG_ALIGN (sizeof(struct_cmsghdr))))
+
+# /usr/include/sys/socket.h: 364
+def CMSG_LEN(len):
+    return ((CMSG_ALIGN (sizeof(struct_cmsghdr))) + len)
+
+# /usr/include/sys/socket.h: 366
+try:
+    SCM_RIGHTS = 0x01
+except:
+    pass
+
+# /usr/include/sys/socket.h: 367
+try:
+    SCM_CREDENTIALS = 0x02
+except:
+    pass
+
+guac_client = struct_guac_client# /tmp/guacamole-server/src/libguac/guacamole/client.h: 59
 
 guac_socket = struct_guac_socket# /tmp/guacamole-server/src/libguac/guacamole/socket.h: 39
 
@@ -2572,9 +4170,21 @@ guac_user = struct_guac_user# /tmp/guacamole-server/src/libguac/guacamole/user.h
 
 guac_user_info = struct_guac_user_info# /tmp/guacamole-server/src/libguac/guacamole/user.h: 46
 
+guac_client_internal = struct_guac_client_internal# /tmp/guacamole-server/src/libguac/client-internal.h: 44
+
 __guac_instruction_handler_mapping = struct___guac_instruction_handler_mapping# /tmp/guacamole-server/src/libguac/user-handlers.h: 72
 
 guac_parser = struct_guac_parser# /tmp/guacamole-server/src/libguac/guacamole/parser.h: 34
+
+msghdr = struct_msghdr# /usr/include/sys/socket.h: 22
+
+cmsghdr = struct_cmsghdr# /usr/include/sys/socket.h: 44
+
+linger = struct_linger# /usr/include/sys/socket.h: 74
+
+sockaddr = struct_sockaddr# /usr/include/sys/socket.h: 369
+
+sockaddr_storage = struct_sockaddr_storage# /usr/include/sys/socket.h: 374
 
 # No inserted files
 

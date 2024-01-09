@@ -71,7 +71,7 @@ def main():
             with conn:
                 guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection made by {addr}')
                 guac_socket = guac_socket_open(conn.fileno())
-                guacd_route_connection(guac_socket)
+                guacd_route_connection(conn, guac_socket)
 
         if guac_socket:
             guac_socket_free(guac_socket)
@@ -81,6 +81,8 @@ def main():
         # If unable to bind to anything, fail
         address_host_port = [a[-1] for a in addresses]
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f"Couldn't bind to addresses: {address_host_port}")
+
+    input('Press key to exit')
 
 
 main()
