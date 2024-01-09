@@ -9,13 +9,13 @@ from zmq import Context, Socket
 from . import libguac_wrapper, log
 from .libguac_wrapper import (
     String, guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
-    guac_socket, guac_socket_require_keep_alive, guac_user_alloc, guac_user_free, guac_user_handle_connection
+    guac_socket, guac_socket_create_zmq, guac_socket_require_keep_alive,
+    guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .constants import (
     GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_USEC_TIMEOUT
 )
 from .log import guacd_log, guacd_log_guac_error
-# from .user_handshake import guac_user_handle_connection
 
 
 @dataclass
@@ -129,7 +129,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user.socket = socket
+    user.socket = guac_socket_create_zmq(zmq.PAIR, proc.user_socket_path(), False)
     user.client = client_ptr
     user.owner = 1
     # Extra debug
