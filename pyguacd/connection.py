@@ -21,6 +21,7 @@ def guac_socket_cleanup(guac_socket):
 
 def guacd_add_user(proc: GuacdProc, parser, gsock, sock) -> int:
     # Wait for process to be ready
+    proc.connect_user()
     proc.wait_for_process()
 
     # Send user zmq socket to process

@@ -2,6 +2,7 @@ from ctypes import c_int, pointer, POINTER
 from dataclasses import dataclass
 from multiprocessing import Process
 from typing import Optional
+from uuid import uuid4
 
 import zmq
 from zmq import Context, Socket
@@ -23,12 +24,14 @@ class GuacdProc:
     client_ptr: POINTER(guac_client)
     pid: Optional[int] = None
     process: Optional[Process] = None
+    user_socket_path: Optional[str] = None
     zmq_context: Optional[Context] = None
     zmq_socket: Optional[Socket] = None
     zmq_user_socket: Optional[Socket] = None
 
     def addr(self):
-        return f'ipc://{GUACD_PROCESS_SOCKET_PATH}{self.process.pid}'
+        client_connection_digits = self.client_ptr.contents.connection_id[1:]
+        return f'ipc://{GUACD_PROCESS_SOCKET_PATH}{client_connection_digits}'
 
     def bind_process(self):
         """Bind socket for process receiving user connections"""
@@ -46,16 +49,17 @@ class GuacdProc:
         """Send process ready over socket"""
         self.zmq_socket.send_json({'status': 'ready'})
 
-    def send_new_user_socket(self, create_socket=False):
-        user_socket_path = self.user_socket_path()
-        if create_socket:
+    def send_new_user_socket(self, create_zsock=False):
+        user_socket_path = self.set_user_socket_path()
+        if create_zsock:
             self.zmq_user_socket = self.zmq_context.socket(zmq.PAIR)
             self.zmq_user_socket.bind(user_socket_path)
         self.zmq_socket.send_string(user_socket_path)
 
-    def user_socket_path(self):
-        client_connection_digits = self.client_ptr.contents.connection_id[1:]
-        return f'ipc//{GUACD_USER_SOCKET_PATH}{client_connection_digits}'
+    def set_user_socket_path(self):
+        uid = uuid4().hex
+        self.user_socket_path = f'ipc//{GUACD_USER_SOCKET_PATH}{uid}'
+        return self.user_socket_path
 
     def wait_for_process(self):
         """Wait for process to be ready to receive user connection"""
