@@ -74,7 +74,7 @@ class GuacdProc:
 
     def set_user_socket_path(self):
         uid = uuid4().hex
-        self.user_socket_path = f'ipc//{GUACD_USER_SOCKET_PATH}{uid}'
+        self.user_socket_path = f'ipc://{GUACD_USER_SOCKET_PATH}{uid}'
         return self.user_socket_path
 
     def wait_for_client(self):
