@@ -1,5 +1,6 @@
 import asyncio
 import socket
+from asyncio import create_task
 from os import makedirs
 from os.path import dirname, join
 
@@ -49,9 +50,9 @@ class TcpZmqProxy:
             msg = await self.zsock.recv()
 
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
-        zmq_to_tcp = asyncio.create_task(self.async_zmq_to_tcp(tcp_writer))
-        tcp_to_zmq = asyncio.create_task(self.async_tcp_to_zmq(tcp_reader))
-        pending = (asyncio.create_task(zmq_to_tcp), asyncio.create_task(tcp_to_zmq))
+        zmq_to_tcp = create_task(self.async_zmq_to_tcp(tcp_writer))
+        tcp_to_zmq = create_task(self.async_tcp_to_zmq(tcp_reader))
+        pending = (zmq_to_tcp, tcp_to_zmq)
 
         done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
         tcp_writer.close()
