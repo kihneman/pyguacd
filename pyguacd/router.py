@@ -25,7 +25,7 @@ class Router:
 
     async def zmq_listener(self):
         user_addr_topic, user_addr = await self.router_sock.recv_multipart()
-        if user_addr_topic != ZmqMsgTopic.ZMQ_ADDR_USER:
+        if user_addr_topic != ZmqMsgTopic.ZMQ_ADDR_USER.value:
             print(f'Unexpected topic in user socket message "{user_addr_topic}"')
             return
 

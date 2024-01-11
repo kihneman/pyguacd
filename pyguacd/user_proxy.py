@@ -87,7 +87,7 @@ class UserProxy:
         user_ipc_addr = new_user_ipc_addr()
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.bind(user_ipc_addr)
-        await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER, user_ipc_addr])
+        await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER.value, user_ipc_addr.encode()])
 
         # Proxy connection
         zmq_to_tcp_task = create_task(self.async_zmq_to_tcp(user_sock, tcp_writer))
