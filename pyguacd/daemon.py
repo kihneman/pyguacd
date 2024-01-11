@@ -6,7 +6,7 @@ from zmq.devices import ThreadProxy
 
 from .constants import GUACD_CONTROL_SOCKET_PATH, GUACD_ROUTER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
 from .router import launch_router
-from .user_proxy import run_tcp_proxy_in_loop, start_tcp_proxy_host_port
+from .user_proxy import run_tcp_proxy_in_loop, start_tcp_proxy_server
 
 
 def create_zmq_control_pub():
@@ -34,7 +34,7 @@ async def main():
     zmq_control_pub: zmq.Socket = create_zmq_control_pub()
     zmq_router_proxy_ctx: zmq.Context = create_zmq_router_proxy()
     launch_router_task = asyncio.create_task(launch_router())
-    start_proxy_task = asyncio.create_task(start_tcp_proxy_host_port())
+    start_proxy_task = asyncio.create_task(start_tcp_proxy_server())
     done, pending = await asyncio.wait((launch_router_task, start_proxy_task), return_when=asyncio.FIRST_COMPLETED)
 
     input('Press enter to exit')
