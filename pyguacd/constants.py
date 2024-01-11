@@ -3,15 +3,17 @@ from enum import auto, IntEnum, Enum
 from os.path import dirname, join
 
 
-class ZmqMsgKey(Enum):
-    """ZeroMQ multipart message keys for Guacd"""
-    CTRL_INT = b'ctrl_int'         # Interrupt async routine
-    USER_ADDR = b'user_addr'       # Pass user address to router
+class ZmqMsgTopic(Enum):
+    """ZeroMQ multipart message first part or 'topic' for pub sub"""
+    INTERRUPT = b'interrupt'            # Interrupt events
+    SVC_READY = b'svc_ready'            # Notification of service being ready
+    ZMQ_ADDR_USER = b'zmq_addr_user'    # ZeroMQ IPC address for user socket
 
 
 class ZmqMsgVal(Enum):
-    """ZeroMQ multipart message values for Guacd"""
-    CTRL_INT_STOP = b'ctrl_int_stop'  # Stop execution interrupt
+    """ZeroMQ multipart message values"""
+    INT_USER = b'int_user'                  # Interrupt user connection
+    SVC_READY_ROUTER = b'svc_ready_router'  # Router service is ready
 
 
 EXIT_SUCCESS = 0
@@ -36,6 +38,8 @@ GUACD_PROCESS_SOCKET_FILENAME = 'proc-'
 GUACD_PROCESS_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_PROCESS_SOCKET_FILENAME)
 GUACD_ROUTER_SOCKET_FILENAME = 'router-ipc'
 GUACD_ROUTER_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_ROUTER_SOCKET_FILENAME)
+GUACD_TCP_PROXY_SOCKET_FILENAME = 'tcp-proxy'
+GUACD_TCP_PROXY_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_TCP_PROXY_SOCKET_FILENAME)
 GUACD_USER_SOCKET_FILENAME = 'user-'
 GUACD_USER_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_USER_SOCKET_FILENAME)
 

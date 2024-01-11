@@ -5,7 +5,7 @@ import zmq
 import zmq.asyncio
 
 from .constants import (
-    GuacClientLogLevel, ZmqMsgKey, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_ROUTER_SOCKET_PATH
+    GuacClientLogLevel, ZmqMsgTopic, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_ROUTER_SOCKET_PATH
 )
 from .libguac_wrapper import guac_parser_alloc, guac_parser_free, guac_socket_create_zmq, guac_socket_free
 from .log import guacd_log
@@ -21,16 +21,16 @@ class Router:
             makedirs(GUACD_SOCKET_DEFAULT_DIR, exist_ok=True)
             router_ipc_addr = f'ipc://{GUACD_ROUTER_SOCKET_PATH}'
         self.router_ipc_addr = router_ipc_addr
-        self.router_sock.bind(self.router_ipc_addr)
+        self.router_sock.connect(self.router_ipc_addr)
 
     async def zmq_listener(self):
-        user_addr_key, user_ipc_addr = await self.router_sock.recv_multipart()
-        if user_addr_key != ZmqMsgKey.USER_ADDR:
-            print(f'Unexpected key for user socket "{user_addr_key}"')
+        user_addr_topic, user_addr = await self.router_sock.recv_multipart()
+        if user_addr_topic != ZmqMsgTopic.ZMQ_ADDR_USER:
+            print(f'Unexpected topic in user socket message "{user_addr_topic}"')
             return
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
-        guac_sock = guac_socket_create_zmq(zmq.PAIR, user_ipc_addr, False)
+        guac_sock = guac_socket_create_zmq(zmq.PAIR, user_addr, False)
         parser_ptr = guac_parser_alloc()
         identifier = parse_identifier(parser_ptr, guac_sock)
         if identifier is None:
@@ -51,6 +51,14 @@ class Router:
         guac_socket_free(guac_sock)
 
 
-def launch_router():
+async def launch_router():
     router = Router()
-    asyncio.run(router.zmq_listener())
+    await router.zmq_listener()
+
+
+def run_router_in_loop():
+    asyncio.run(launch_router())
+
+
+if __name__ == '__main__':
+    run_router_in_loop()
