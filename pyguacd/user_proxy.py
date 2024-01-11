@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import zmq
 import zmq.asyncio
+from zmq.devices import ThreadProxy
 
 from .constants import (
     GuacClientLogLevel, ZmqMsgTopic, ZmqMsgVal, GUACD_SOCKET_DEFAULT_DIR,
@@ -23,6 +24,23 @@ PORT = GUACD_DEFAULT_BIND_PORT
 def new_user_ipc_addr():
     uid = uuid4().hex
     return f'ipc://{GUACD_USER_SOCKET_PATH}{uid}'
+
+
+def new_user_ipc_addr_pair():
+    ipc = new_user_ipc_addr()
+    return f'{ipc}-in', f'{ipc}-out'
+
+
+class ZmqThreadProxy:
+    def __init__(self):
+        self.addr_in, self.addr_out = new_user_ipc_addr_pair()
+        self.proxy = ThreadProxy(zmq.PAIR, zmq.PAIR)
+        self.proxy.bind_in(self.addr_in)
+        self.proxy.bind_out(self.addr_out)
+        self.proxy.start()
+
+    def destroy(self):
+        self.proxy.context_factory().destroy()
 
 
 class UserProxy:
@@ -83,11 +101,12 @@ class UserProxy:
 
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
         print('Handling connection')
-        # Send new user socket to router
-        user_ipc_addr = new_user_ipc_addr()
+        zmq_user_proxy = ZmqThreadProxy()
         user_sock = self.ctx.socket(zmq.PAIR)
-        user_sock.bind(user_ipc_addr)
-        await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER.value, user_ipc_addr.encode()])
+        user_sock.connect(zmq_user_proxy.addr_in)
+
+        # Send new user socket to router
+        await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER.value, zmq_user_proxy.addr_out.encode()])
 
         # Proxy connection
         zmq_to_tcp_task = create_task(self.async_zmq_to_tcp(user_sock, tcp_writer))
@@ -102,6 +121,7 @@ class UserProxy:
         tcp_writer.close()
         await tcp_writer.wait_closed()
         user_sock.close()
+        zmq_user_proxy.destroy()
 
 
 async def start_tcp_proxy_server(tcp_sock=None, router_ipc_addr=None, cb=None, cb_args=()):

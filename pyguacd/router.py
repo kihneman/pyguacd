@@ -30,6 +30,7 @@ class Router:
             print(f'Unexpected topic in user socket message "{user_addr_topic.decode()}"')
             return
 
+        print(f'Received user ipc addr "{user_addr}"')
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
         guac_sock = guac_socket_create_zmq(c_int(zmq.PAIR), String(user_addr), False)
         parser_ptr = guac_parser_alloc()
