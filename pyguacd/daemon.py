@@ -45,3 +45,7 @@ async def main():
             task.cancel()
     zmq_router_proxy_ctx.destroy()
     zmq_control_pub.close()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
