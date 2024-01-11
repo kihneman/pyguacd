@@ -1,4 +1,5 @@
 import asyncio
+from ctypes import c_int
 from os import makedirs
 
 import zmq
@@ -7,7 +8,7 @@ import zmq.asyncio
 from .constants import (
     GuacClientLogLevel, ZmqMsgTopic, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_ROUTER_SOCKET_PATH
 )
-from .libguac_wrapper import guac_parser_alloc, guac_parser_free, guac_socket_create_zmq, guac_socket_free
+from .libguac_wrapper import guac_parser_alloc, guac_parser_free, guac_socket_create_zmq, guac_socket_free, String
 from .log import guacd_log
 from .parser import parse_identifier
 
@@ -26,11 +27,11 @@ class Router:
     async def zmq_listener(self):
         user_addr_topic, user_addr = await self.router_sock.recv_multipart()
         if user_addr_topic != ZmqMsgTopic.ZMQ_ADDR_USER.value:
-            print(f'Unexpected topic in user socket message "{user_addr_topic}"')
+            print(f'Unexpected topic in user socket message "{user_addr_topic.decode()}"')
             return
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
-        guac_sock = guac_socket_create_zmq(zmq.PAIR, user_addr, False)
+        guac_sock = guac_socket_create_zmq(c_int(zmq.PAIR), String(user_addr), False)
         parser_ptr = guac_parser_alloc()
         identifier = parse_identifier(parser_ptr, guac_sock)
         if identifier is None:
