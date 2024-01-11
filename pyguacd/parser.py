@@ -1,6 +1,6 @@
 from ctypes import cast, c_char_p, c_int, POINTER
 
-import libguac_wrapper
+from . import libguac_wrapper
 from .constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
 from .libguac_wrapper import String, guac_parser, guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_socket
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
