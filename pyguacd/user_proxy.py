@@ -15,6 +15,10 @@ from .log import guacd_log
 from .socket_utils import get_addresses, resolve_hostname, socket_bind
 
 
+HOST = '10.0.0.15'
+PORT = 4822
+
+
 def new_user_ipc_addr():
     uid = uuid4().hex
     return f'ipc://{GUACD_USER_SOCKET_PATH}{uid}'
@@ -77,6 +81,7 @@ class UserProxy:
                     break
 
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
+        print('Handling connection')
         # Send new user socket to router
         user_ipc_addr = new_user_ipc_addr()
         user_sock = self.ctx.socket(zmq.PAIR)
@@ -101,7 +106,7 @@ class UserProxy:
 async def start_tcp_proxy_server(tcp_sock=None, router_ipc_addr=None, cb=None, cb_args=()):
     tcp_zmq_proxy = UserProxy(router_ipc_addr)
     if tcp_sock is None:
-        server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, '127.0.0.1', 8888)
+        server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, HOST, PORT)
     else:
         server = await asyncio.start_server(tcp_zmq_proxy.handle_proxy, sock=tcp_sock)
 
@@ -119,7 +124,7 @@ async def start_tcp_proxy_server(tcp_sock=None, router_ipc_addr=None, cb=None, c
         cb(*cb_args)
 
 
-async def start_tcp_proxy_host_port(host='127.0.0.1', port=4822):
+async def start_tcp_proxy_host_port(host=HOST, port=PORT):
     """Launch the asyncio proxy server on provided host and port"""
     if addresses := get_addresses(host, port) is None:
         return
@@ -150,8 +155,8 @@ async def start_tcp_proxy_host_port(host='127.0.0.1', port=4822):
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f"Couldn't bind to addresses: {address_host_port}")
 
 
-def run_tcp_proxy_in_loop(host='127.0.0.1', port=4822):
-    asyncio.run(start_tcp_proxy_host_port(host, port))
+def run_tcp_proxy_in_loop(host=HOST, port=PORT):
+    asyncio.run(start_tcp_proxy_server())
 
 
 if __name__ == '__main__':
