@@ -27,14 +27,20 @@ class Router:
     async def zmq_listener(self):
         user_addr, mon_addr = await self.router_sock.recv_multipart()
         mon_sock = self.ctx.socket(zmq.PAIR)
-        mon_sock.connect(mon_addr)
-        data = await mon_sock.recv()
-        print(f'Received initial user data "{data.decode()}" on ipc socket "{user_addr.decode()}"')
+        mon_sock.connect(mon_addr.decode())
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
         guac_sock = guac_socket_create_zmq(c_int(zmq.PAIR), String(user_addr), False)
         parser_ptr = guac_parser_alloc()
         identifier = parse_identifier(parser_ptr, guac_sock)
+
+        item_count = await mon_sock.poll(1000)
+        if item_count == 0:
+            print("Couldn't get data from monitor port")
+        else:
+            data = await mon_sock.recv()
+            print(f'Monitored initial user data "{data.decode()}" sent on ipc socket "{user_addr.decode()}"')
+
         if identifier is None:
             guac_parser_free(parser_ptr)
             return 1
