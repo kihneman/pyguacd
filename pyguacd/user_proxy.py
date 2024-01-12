@@ -37,7 +37,7 @@ def new_user_ipc_addr_pair(with_mon=False):
 class ZmqThreadProxy:
     def __init__(self):
         self.addr_in, self.addr_out, self.addr_mon = new_user_ipc_addr_pair(with_mon=True)
-        self.proxy = ThreadProxy(zmq.PAIR, zmq.PAIR)
+        self.proxy = ThreadProxy(zmq.PAIR, zmq.PAIR, zmq.PAIR)
         self.proxy.bind_in(self.addr_in)
         self.proxy.bind_out(self.addr_out)
         self.proxy.bind_mon(self.addr_mon)
