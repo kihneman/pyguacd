@@ -48,7 +48,7 @@ class GuacdProc:
         """Send process ready over socket"""
         self.zmq_socket.send_multipart((b'status', ZsockStatus.CLIENT_READY.value))
 
-    def recv_user_socket_addr(self):
+    def recv_user_socket_addr(self) -> bytes:
         user_socket_addr = self.zmq_socket.recv()
         # resp_status = ZsockStatus.USER_SOCKET_RECV if user_socket_path else ZsockStatus.USER_SOCKET_ERROR
         # self.zmq_socket.send_multipart({b'status': resp_status})
@@ -91,10 +91,10 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     proc.connect()
 
     # Temp debug for new add user
-    proc.client_ready()
-    user_socket_addr = proc.recv_user_socket_addr()
-    print(f'Received user socket address "{user_socket_addr}"')
-    return
+    # proc.client_ready()
+    # user_socket_addr = proc.recv_user_socket_addr()
+    # print(f'Received user socket address "{user_socket_addr}"')
+    # return
 
     client_ptr = proc.client_ptr
     client = client_ptr.contents
@@ -122,7 +122,6 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     client_socket_ptr = client.socket
     guac_socket_require_keep_alive(client_socket_ptr)
 
-    proc.client_ready()
     # Add each received file descriptor as a new user
     # while received_fd := guacd_recv_fd(fd_socket) != -1:
     #     guacd_proc_add_user(proc, received_fd, owner)
@@ -130,11 +129,12 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     #     # Future file descriptors are not owners
     #     owner = 0
 
+    proc.client_ready()
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user_socket_path = proc.recv_user_socket_path()
-    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_path, False)
+    user_socket_addr = String(proc.recv_user_socket_addr())
+    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
     user.client = client_ptr
     user.owner = 1
     # Extra debug
