@@ -2,11 +2,9 @@ import asyncio
 import socket
 from asyncio import create_task
 from os import makedirs
-from uuid import uuid4
 
 import zmq
 import zmq.asyncio
-from zmq.devices import ThreadProxy
 
 from .constants import (
     GuacClientLogLevel, ZmqMsgTopic, ZmqMsgVal, GUACD_SOCKET_DEFAULT_DIR,
@@ -15,36 +13,11 @@ from .constants import (
 )
 from .log import guacd_log
 from .socket_utils import get_addresses, resolve_hostname, socket_bind
+from .zmq_utils import ZmqThreadProxy
 
 
 HOST = GUACD_DEFAULT_BIND_HOST
 PORT = GUACD_DEFAULT_BIND_PORT
-
-
-def new_user_ipc_addr():
-    uid = uuid4().hex
-    return f'ipc://{GUACD_USER_SOCKET_PATH}{uid}'
-
-
-def new_user_ipc_addr_pair(with_mon=False):
-    ipc = new_user_ipc_addr()
-    result = [f'{ipc}-in', f'{ipc}-out']
-    if with_mon:
-        result.append(f'{ipc}-mon')
-    return result
-
-
-class ZmqThreadProxy:
-    def __init__(self):
-        self.addr_in, self.addr_out, self.addr_mon = new_user_ipc_addr_pair(with_mon=True)
-        self.proxy = ThreadProxy(zmq.PAIR, zmq.PAIR, zmq.PAIR)
-        self.proxy.bind_in(self.addr_in)
-        self.proxy.bind_out(self.addr_out)
-        self.proxy.bind_mon(self.addr_mon)
-        self.proxy.start()
-
-    def destroy(self):
-        self.proxy.context_factory().destroy()
 
 
 class UserProxy:
@@ -60,11 +33,6 @@ class UserProxy:
         self.control_ipc_addr = f'ipc://{GUACD_CONTROL_SOCKET_PATH}'
 
     async def async_tcp_to_zmq(self, tcp_reader: asyncio.StreamReader, user_sock):
-        # Transfer data from socket to file descriptor
-        # while ((length = guac_socket_read(params->socket, buffer, sizeof(buffer))) > 0) {
-        #     if (__write_all(params->fd, buffer, length) < 0)
-        #         break;
-        # }
         data = await tcp_reader.read(100)
         while len(data) > 0:
             print(f'sending "{data.decode()}" from user')
@@ -72,13 +40,6 @@ class UserProxy:
             data = await tcp_reader.read(100)
 
     async def async_zmq_to_tcp(self, user_sock, tcp_writer: asyncio.StreamWriter):
-        # Transfer data from file descriptor to socket
-        # int length;
-        # while ((length = read(params->fd, buffer, sizeof(buffer))) > 0) {
-        #   if (guac_socket_write(params->socket, buffer, length))
-        #       break;
-        #   guac_socket_flush(params->socket);
-        # }
         control_sock = self.ctx.socket(zmq.SUB)
         control_sock.connect(self.control_ipc_addr)
         control_sock.subscribe(ZmqMsgTopic.INTERRUPT.value)
@@ -106,8 +67,8 @@ class UserProxy:
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
         print(f'Handling connection')
 
-        # Connect zmq proxy to router
-        zmq_user_proxy = ZmqThreadProxy()
+        # Create user socket
+        zmq_user_proxy = ZmqThreadProxy(GUACD_USER_SOCKET_PATH)
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.connect(zmq_user_proxy.addr_in)
 
