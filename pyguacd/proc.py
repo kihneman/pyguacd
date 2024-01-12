@@ -157,7 +157,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
 def guacd_create_proc(protocol: bytes, zmq_context):
     # Associate new client
     proc = GuacdProc(guac_client_alloc())
-    zmq_context, zmq_socket = proc.bind(zmq_context)
+    zmq_socket = proc.bind(zmq_context)
 
     # Init logging
     # client.log_handler = pointer(ctypes_wrapper.guac_client_log_handler(log.guacd_client_log))
@@ -166,6 +166,5 @@ def guacd_create_proc(protocol: bytes, zmq_context):
     proc.process.start()
 
     # Set properties not passed to new process
-    proc.zmq_context = zmq_context
     proc.zmq_socket = zmq_socket
     return proc
