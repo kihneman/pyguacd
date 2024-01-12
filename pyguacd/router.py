@@ -14,15 +14,17 @@ from .libguac_wrapper import (
 )
 from .log import guacd_log
 from .parser import parse_identifier
+from .proc import guacd_create_proc
+from .zmq_utils import wait_for_status, ZsockStatus
 
 
 async def guac_socket_poll_forever(guac_socket):
     slept = 0
     while ret_val := guac_socket_select(guac_socket, 0) == 0:
-        # Sleep 10ms
-        await asyncio.sleep(.01)
-        slept += 10
-    print(f'Slept {slept}ms')
+        # Sleep 1ms
+        await asyncio.sleep(.001)
+        slept += 1
+    # print(f'Slept {slept}ms')
     return ret_val
 
 
@@ -44,10 +46,20 @@ class Router:
         self.router_ipc_addr = router_ipc_addr
         self.router_sock.connect(self.router_ipc_addr)
 
+    @staticmethod
+    async def send_user_socket_addr(proc_sock: zmq.asyncio.Socket, user_socket_addr: bytes):
+        await wait_for_status(proc_sock, ZsockStatus.CLIENT_READY)
+        print('Client ready')
+        await proc_sock.send(user_socket_addr)
+        print('User socket address sent')
+        # await self.zmq_socket.send_json({'user_socket_path': user_socket_path})
+        # self.wait_for_status(ZsockStatus.USER_SOCKET_RECV)
+        # return user_socket_path
+
     async def zmq_listener(self):
         user_addr, mon_addr = await self.router_sock.recv_multipart()
-        mon_sock = self.ctx.socket(zmq.PAIR)
-        mon_sock.connect(mon_addr.decode())
+        # mon_sock = self.ctx.socket(zmq.PAIR)
+        # mon_sock.connect(mon_addr.decode())
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
         # For now await availability of data before running
@@ -55,13 +67,6 @@ class Router:
         await guac_socket_poll(guac_sock, 2)
         parser_ptr = guac_parser_alloc()
         identifier = parse_identifier(parser_ptr, guac_sock)
-
-        item_count = await mon_sock.poll(1000)
-        if item_count == 0:
-            print("Couldn't get data from monitor port")
-        else:
-            data = await mon_sock.recv()
-            print(f'Monitored initial user data "{data.decode()}" sent on ipc socket "{user_addr.decode()}"')
 
         if identifier is None:
             guac_parser_free(parser_ptr)
@@ -76,9 +81,12 @@ class Router:
         # Otherwise, create new client
         else:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier.decode()}"')
+            guacd_proc = guacd_create_proc(identifier, self.ctx)
 
         guac_parser_free(parser_ptr)
         guac_socket_free(guac_sock)
+
+        await self.send_user_socket_addr(guacd_proc.zmq_socket, user_addr)
 
 
 async def launch_router():
