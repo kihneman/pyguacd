@@ -104,14 +104,15 @@ class UserProxy:
                     break
 
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
+        print(f'Handling connection')
+
         # Connect zmq proxy to router
         zmq_user_proxy = ZmqThreadProxy()
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.connect(zmq_user_proxy.addr_in)
-        print(f'Handling connection. Monitor with "{zmq_user_proxy.addr_mon}"')
 
         # Send new user socket to router
-        await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER.value, zmq_user_proxy.addr_out.encode()])
+        await self.tcp_proxy_sock.send_multipart([zmq_user_proxy.addr_out.encode(), zmq_user_proxy.addr_mon.encode()])
 
         # Proxy connection
         zmq_to_tcp_task = create_task(self.async_zmq_to_tcp(user_sock, tcp_writer))

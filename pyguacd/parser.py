@@ -40,4 +40,4 @@ def parse_identifier(parser_ptr: POINTER(guac_parser), guac_sock: POINTER(guac_s
         return None
 
     identifier: bytes = cast(parser.argv[0], c_char_p).value
-    return identifier, parser_ptr
+    return identifier
