@@ -26,17 +26,21 @@ def new_user_ipc_addr():
     return f'ipc://{GUACD_USER_SOCKET_PATH}{uid}'
 
 
-def new_user_ipc_addr_pair():
+def new_user_ipc_addr_pair(with_mon=False):
     ipc = new_user_ipc_addr()
-    return f'{ipc}-in', f'{ipc}-out'
+    result = [f'{ipc}-in', f'{ipc}-out']
+    if with_mon:
+        result.append(f'{ipc}-mon')
+    return result
 
 
 class ZmqThreadProxy:
     def __init__(self):
-        self.addr_in, self.addr_out = new_user_ipc_addr_pair()
+        self.addr_in, self.addr_out, self.addr_mon = new_user_ipc_addr_pair(with_mon=True)
         self.proxy = ThreadProxy(zmq.PAIR, zmq.PAIR)
         self.proxy.bind_in(self.addr_in)
         self.proxy.bind_out(self.addr_out)
+        self.proxy.bind_mon(self.addr_mon)
         self.proxy.start()
 
     def destroy(self):
@@ -100,10 +104,11 @@ class UserProxy:
                     break
 
     async def handle_proxy(self, tcp_reader: asyncio.StreamReader, tcp_writer: asyncio.StreamWriter):
-        print('Handling connection')
+        # Connect zmq proxy to router
         zmq_user_proxy = ZmqThreadProxy()
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.connect(zmq_user_proxy.addr_in)
+        print(f'Handling connection. Monitor with "{zmq_user_proxy.addr_mon}"')
 
         # Send new user socket to router
         await self.tcp_proxy_sock.send_multipart([ZmqMsgTopic.ZMQ_ADDR_USER.value, zmq_user_proxy.addr_out.encode()])
