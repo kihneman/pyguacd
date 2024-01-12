@@ -28,6 +28,7 @@ class Router:
         user_addr, mon_addr = await self.router_sock.recv_multipart()
         mon_sock = self.ctx.socket(zmq.PAIR)
         mon_sock.connect(mon_addr.decode())
+        await asyncio.sleep(1)
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
         guac_sock = guac_socket_create_zmq(c_int(zmq.PAIR), String(user_addr), False)
