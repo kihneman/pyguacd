@@ -2,12 +2,14 @@ import asyncio
 from asyncio import create_task, wait_for
 from ctypes import c_int
 from os import makedirs
+from os.path import join
 
 import zmq
 import zmq.asyncio
 
 from .constants import (
-    GuacClientLogLevel, ZmqMsgTopic, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_ROUTER_SOCKET_PATH
+    GuacClientLogLevel, ZmqMsgTopic, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_SOCKET_DIR,
+    GUACD_ROUTER_SOCKET_PATH
 )
 from .libguac_wrapper import (
     String, guac_parser_alloc, guac_parser_free, guac_socket_create_zmq, guac_socket_free, guac_socket_select
@@ -91,9 +93,12 @@ class Router:
         guac_parser_free(parser_ptr)
         guac_socket_free(guac_sock)
 
-        await self.send_user_socket_addr(guacd_proc.zmq_socket, user_addr)
+        # Create new socket for debugging of client output
+        debug_zsock = self.ctx.socket(zmq.PAIR)
+        debug_addr = join(GUACD_SOCKET_DIR, 'debug-ipc')
+        debug_zsock.bind(debug_addr)
+        await self.send_user_socket_addr(guacd_proc.zmq_socket, debug_addr.encode())
 
-        # Test run for 60 seconds
         # mon_sock = self.ctx.socket(zmq.PAIR)
         # mon_sock.connect(mon_addr.decode())
         #     await wait_for(
@@ -101,7 +106,13 @@ class Router:
         #     )
         for i in range(self.timeout, 0, -5):
             print(f'TIMER: {i}...')
-            await asyncio.sleep(5)
+            await wait_for(
+                create_task(self.zmq_monitor_output(debug_zsock)), timeout=5
+            )
+
+        # for i in range(self.timeout, 0, -5):
+        #     print(f'TIMER: {i}...')
+        #     await asyncio.sleep(5)
 
 
 async def launch_router(timeout=30):
