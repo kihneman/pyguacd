@@ -32,7 +32,8 @@ class UserProxy:
         self.tcp_proxy_sock.connect(self.tcp_proxy_addr)
         self.control_ipc_addr = f'ipc://{GUACD_CONTROL_SOCKET_PATH}'
 
-    async def async_tcp_to_zmq(self, tcp_reader: asyncio.StreamReader, user_sock):
+    @staticmethod
+    async def async_tcp_to_zmq(tcp_reader: asyncio.StreamReader, user_sock):
         data = await tcp_reader.read(100)
         while len(data) > 0:
             print(f'sending "{data.decode()}" from user')
@@ -68,7 +69,7 @@ class UserProxy:
         print(f'Handling connection')
 
         # Create user socket
-        zmq_user_proxy = ZmqThreadProxy(GUACD_USER_SOCKET_PATH)
+        zmq_user_proxy = ZmqThreadProxy(GUACD_USER_SOCKET_PATH, with_mon=True)
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.connect(zmq_user_proxy.addr_in)
 

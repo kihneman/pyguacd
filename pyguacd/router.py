@@ -56,10 +56,14 @@ class Router:
         # self.wait_for_status(ZsockStatus.USER_SOCKET_RECV)
         # return user_socket_path
 
+    @staticmethod
+    async def zmq_monitor_output(monitor_sock):
+        while True:
+            output = await monitor_sock.recv()
+            print(f'MONITOR: {output.decode()}')
+
     async def zmq_listener(self):
         user_addr, mon_addr = await self.router_sock.recv_multipart()
-        # mon_sock = self.ctx.socket(zmq.PAIR)
-        # mon_sock.connect(mon_addr.decode())
 
         # This may need to be in another thread due to blocking libguac parser and libguac zmq
         # For now await availability of data before running
@@ -87,6 +91,15 @@ class Router:
         guac_socket_free(guac_sock)
 
         await self.send_user_socket_addr(guacd_proc.zmq_socket, user_addr)
+
+        # Test run for 60 seconds
+        mon_sock = self.ctx.socket(zmq.PAIR)
+        mon_sock.connect(mon_addr.decode())
+        for i in range(60, 0, -5):
+            print(f'TIMER: {i}...')
+            return await wait_for(
+                create_task(self.zmq_monitor_output(mon_sock)), timeout=5
+            )
 
 
 async def launch_router():
