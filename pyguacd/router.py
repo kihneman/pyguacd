@@ -97,7 +97,7 @@ class Router:
         mon_sock.connect(mon_addr.decode())
         for i in range(60, 0, -5):
             print(f'TIMER: {i}...')
-            return await wait_for(
+            await wait_for(
                 create_task(self.zmq_monitor_output(mon_sock)), timeout=5
             )
 
