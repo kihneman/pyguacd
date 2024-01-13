@@ -36,7 +36,8 @@ async def guac_socket_poll(guac_sock, timeout):
 
 
 class Router:
-    def __init__(self, router_ipc_addr=None):
+    def __init__(self, timeout=30, router_ipc_addr=None):
+        self.timeout = timeout
         self.ctx = zmq.asyncio.Context()
         self.router_sock = self.ctx.socket(zmq.PAIR)
 
@@ -93,17 +94,18 @@ class Router:
         await self.send_user_socket_addr(guacd_proc.zmq_socket, user_addr)
 
         # Test run for 60 seconds
-        mon_sock = self.ctx.socket(zmq.PAIR)
-        mon_sock.connect(mon_addr.decode())
-        for i in range(60, 0, -5):
+        # mon_sock = self.ctx.socket(zmq.PAIR)
+        # mon_sock.connect(mon_addr.decode())
+        #     await wait_for(
+        #         create_task(self.zmq_monitor_output(mon_sock)), timeout=5
+        #     )
+        for i in range(self.timeout, 0, -5):
             print(f'TIMER: {i}...')
-            await wait_for(
-                create_task(self.zmq_monitor_output(mon_sock)), timeout=5
-            )
+            await asyncio.sleep(5)
 
 
-async def launch_router():
-    router = Router()
+async def launch_router(timeout=30):
+    router = Router(timeout)
     await router.zmq_listener()
 
 

@@ -40,7 +40,16 @@ class UserProxy:
             await user_sock.send(data)
             data = await tcp_reader.read(100)
 
-    async def async_zmq_to_tcp(self, user_sock, tcp_writer: asyncio.StreamWriter):
+    @staticmethod
+    async def async_zmq_to_tcp(user_sock, tcp_writer: asyncio.StreamWriter):
+        msg = await user_sock.recv()
+        while len(msg) > 0:
+            print(f'sending "{msg.decode()}" to user')
+            tcp_writer.write(msg)
+            await tcp_writer.drain()
+            msg = await user_sock.recv()
+
+    async def async_zmq_to_tcp_with_control(self, user_sock, tcp_writer: asyncio.StreamWriter):
         control_sock = self.ctx.socket(zmq.SUB)
         control_sock.connect(self.control_ipc_addr)
         control_sock.subscribe(ZmqMsgTopic.INTERRUPT.value)
@@ -69,7 +78,7 @@ class UserProxy:
         print(f'Handling connection')
 
         # Create user socket
-        zmq_user_proxy = ZmqThreadProxy(GUACD_USER_SOCKET_PATH, with_mon=True)
+        zmq_user_proxy = ZmqThreadProxy(GUACD_USER_SOCKET_PATH)
         user_sock = self.ctx.socket(zmq.PAIR)
         user_sock.connect(zmq_user_proxy.addr_in)
 

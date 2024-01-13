@@ -1,4 +1,5 @@
 import asyncio
+from argparse import ArgumentParser
 from multiprocessing import Process
 
 import zmq
@@ -30,14 +31,12 @@ def run_tcp_proxy_in_process():
     p.start()
 
 
-async def main():
+async def main(timeout):
     zmq_control_pub: zmq.Socket = create_zmq_control_pub()
     zmq_router_proxy_ctx: zmq.Context = create_zmq_router_proxy()
-    launch_router_task = asyncio.create_task(launch_router())
+    launch_router_task = asyncio.create_task(launch_router(timeout))
     start_proxy_task = asyncio.create_task(start_tcp_proxy_server())
     done, pending = await asyncio.wait((launch_router_task, start_proxy_task), return_when=asyncio.FIRST_COMPLETED)
-
-    input('Press enter to exit')
 
     # Cleanup
     for task in pending:
@@ -48,4 +47,7 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    parser = ArgumentParser()
+    parser.add_argument('-t', '--timeout', type=int)
+    args = parser.parse_args()
+    asyncio.run(main(timeout=args.timeout))
