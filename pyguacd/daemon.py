@@ -5,7 +5,12 @@ from multiprocessing import Process
 import zmq
 from zmq.devices import ThreadProxy
 
-from .constants import GUACD_CONTROL_SOCKET_PATH, GUACD_ROUTER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
+from .connection import guacd_route_connection
+from .constants import (
+    GUACD_CONTROL_SOCKET_PATH, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT,
+    GUACD_ROUTER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
+)
+from .libguac_wrapper import guac_socket_create_zmq
 from .router import launch_router
 from .user_proxy import run_tcp_proxy_in_loop, start_tcp_proxy_server
 
@@ -46,8 +51,17 @@ async def main(timeout):
     zmq_control_pub.close()
 
 
+def zmq_no_async():
+    zmq_sock = guac_socket_create_zmq(zmq.STREAM, f'tcp://{GUACD_DEFAULT_BIND_HOST}:{GUACD_DEFAULT_BIND_PORT}', True)
+    guacd_route_connection(zmq_sock)
+
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-t', '--timeout', type=int)
+    parser.add_argument('-z', '--zmq-no-async', action='store_true')
     args = parser.parse_args()
-    asyncio.run(main(timeout=args.timeout))
+    if args.zmq_no_async:
+        zmq_no_async()
+    else:
+        asyncio.run(main(timeout=args.timeout))

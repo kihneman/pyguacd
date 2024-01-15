@@ -39,7 +39,7 @@ def guacd_add_user(proc: GuacdProc, parser, gsock, sock) -> int:
     #     data = user_socket.recv()
 
 
-def guacd_route_connection(sock: socket.socket, gsock: POINTER(guac_socket)) -> int:
+def guacd_route_connection(gsock: POINTER(guac_socket)) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole

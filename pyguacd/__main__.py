@@ -71,7 +71,7 @@ def main():
             with conn:
                 guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection made by {addr}')
                 guac_socket = guac_socket_open(conn.fileno())
-                guacd_route_connection(guac_socket, conn)
+                guacd_route_connection(guac_socket)
 
         if guac_socket:
             guac_socket_free(guac_socket)
