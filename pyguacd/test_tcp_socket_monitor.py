@@ -22,6 +22,10 @@ class TcpServer:
     async def handle(self, reader: StreamReader, writer: StreamWriter):
         self.srv_reader, self.srv_writer = reader, writer
         self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', 4882)
+        await asyncio.wait(
+            (create_task(self.handle_conn_read()), create_task(self.handle_srv_read())),
+            return_when=asyncio.ALL_COMPLETED
+        )
 
     async def handle_conn_read(self):
         from_addr = self.conn_writer.get_extra_info('peername')
@@ -63,7 +67,7 @@ class TcpServer:
 
 async def run_server():
     tcp_server = TcpServer()
-    tcp_server.server = await asyncio.start_server(tcp_server.handle, '127.0.0.1', 8888)
+    tcp_server.server = await asyncio.start_server(tcp_server.handle, '0.0.0.0', 8888)
     server = tcp_server.server
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
