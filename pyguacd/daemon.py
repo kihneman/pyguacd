@@ -2,10 +2,12 @@ import asyncio
 import socket
 from argparse import ArgumentParser
 from multiprocessing import Process
+from threading import Thread
 
 import zmq
 from zmq.devices import ThreadProxy
 
+from . import test_tcp_socket_monitor
 from .connection import guacd_route_connection
 from .constants import (
     GUACD_CONTROL_SOCKET_PATH, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT,
@@ -72,11 +74,17 @@ def zmq_no_async():
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-t', '--timeout', type=int)
+    parser.add_argument('-p', '--proxy', action='store_true')
     parser.add_argument('-s', '--socket-no-async', action='store_true')
     parser.add_argument('-z', '--zmq-no-async', action='store_true')
     args = parser.parse_args()
     if args.socket_no_async:
-        socket_no_async()
+        if args.proxy:
+            t = Thread(target=socket_no_async)
+            t.start()
+            test_tcp_socket_monitor.main()
+        else:
+            socket_no_async()
     elif args.zmq_no_async:
         zmq_no_async()
     else:
