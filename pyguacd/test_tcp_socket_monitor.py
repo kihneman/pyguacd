@@ -4,6 +4,8 @@ from asyncio.streams import StreamReader, StreamWriter
 from dataclasses import dataclass
 from typing import Optional
 
+from .constants import GUACD_DEFAULT_BIND_PORT
+
 
 @dataclass
 class TcpServer:
@@ -21,7 +23,7 @@ class TcpServer:
 
     async def handle(self, reader: StreamReader, writer: StreamWriter):
         self.srv_reader, self.srv_writer = reader, writer
-        self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', 4882)
+        self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', int(GUACD_DEFAULT_BIND_PORT))
         await asyncio.wait(
             (create_task(self.handle_conn_read()), create_task(self.handle_srv_read())),
             return_when=asyncio.ALL_COMPLETED
