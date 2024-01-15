@@ -55,9 +55,11 @@ async def main(timeout):
 def socket_no_async():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind((GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT))
+    sock.bind((GUACD_DEFAULT_BIND_HOST, int(GUACD_DEFAULT_BIND_PORT)))
+    print(f'Listening on host "{GUACD_DEFAULT_BIND_HOST}", port {GUACD_DEFAULT_BIND_PORT}')
     sock.listen()
     conn, addr = sock.accept()
+    print(f'Connection made by {addr}')
     guac_socket = guac_socket_open(conn.fileno())
     guacd_route_connection(guac_socket)
 
