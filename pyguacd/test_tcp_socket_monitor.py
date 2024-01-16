@@ -4,6 +4,9 @@ from asyncio.streams import StreamReader, StreamWriter
 from dataclasses import dataclass
 from typing import Optional
 
+import zmq
+import zmq.asyncio
+
 from .constants import GUACD_DEFAULT_BIND_PORT
 
 
@@ -14,14 +17,19 @@ class TcpServer:
     conn_writer: Optional[StreamWriter] = None
     srv_reader: Optional[StreamReader] = None
     srv_writer: Optional[StreamWriter] = None
+    zmq_output: Optional[zmq.asyncio.Socket] = None
 
     async def close(self):
-        print("Close the connection")
+        await self.zmq_output.send(b'Close the connection')
+        self.zmq_output.close()
         self.srv_writer.close()
         self.conn_writer.close()
         await gather(create_task(self.srv_writer.wait_closed()), create_task(self.conn_writer.wait_closed()))
 
     async def handle(self, reader: StreamReader, writer: StreamWriter):
+        ctx = zmq.asyncio.Context()
+        self.zmq_output = ctx.socket(zmq.PAIR)
+        self.zmq_output.bind('tcp:0.0.0.0:8890')
         self.srv_reader, self.srv_writer = reader, writer
         self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', int(GUACD_DEFAULT_BIND_PORT))
         await asyncio.wait(
@@ -36,9 +44,11 @@ class TcpServer:
             data = await self.conn_reader.read(1000)
             message = data.decode()
 
-            print(f"Received from {from_addr!r}: {message!r}")
+            # print(f"Received from {from_addr!r}: {message!r}")
+            await self.zmq_output.send(f'Received from {from_addr}: {message}'.encode())
 
-            print(f"Send to {to_addr!r}: {message!r}")
+            # print(f"Send to {to_addr!r}: {message!r}")
+            await self.zmq_output.send(f'Send to {to_addr}: {message}'.encode())
             self.srv_writer.write(data)
             await self.srv_writer.drain()
 
@@ -54,9 +64,11 @@ class TcpServer:
             data = await self.srv_reader.read(1000)
             message = data.decode()
 
-            print(f"Received from {from_addr!r}: {message!r}")
+            # print(f"Received from {from_addr!r}: {message!r}")
+            await self.zmq_output.send(f'Received from {from_addr}: {message}'.encode())
 
-            print(f"Send to {to_addr!r}: {message!r}")
+            # print(f"Send to {to_addr!r}: {message!r}")
+            await self.zmq_output.send(f'Send to {to_addr}: {message}'.encode())
             self.conn_writer.write(data)
             await self.conn_writer.drain()
 
