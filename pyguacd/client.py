@@ -1,9 +1,12 @@
 from ctypes import c_int, pointer, POINTER
 
+import zmq
+
 from . import libguac_wrapper, log
 from .libguac_wrapper import (
     String, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
-    guac_socket, guac_socket_require_keep_alive, guac_user_alloc, guac_user_free, guac_user_handle_connection
+    guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_require_keep_alive,
+    guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
 from .log import guacd_log, guacd_log_guac_error
@@ -32,7 +35,7 @@ def cleanup_client(client):
     # }
 
 
-def guacd_create_client(socket: POINTER(guac_socket), protocol: bytes):
+def guacd_create_client(protocol: bytes, guac_sock: POINTER(guac_socket) = None, zmq_addr: str = None):
     # Similar to guacd_create_proc(protocol) but without creating process
     # Open UNIX socket pair
     # try:
@@ -40,6 +43,12 @@ def guacd_create_client(socket: POINTER(guac_socket), protocol: bytes):
     # except Exception as e:
     #     guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Error opening socket pair: {e}')
     #     return  None
+
+    if guac_sock is None:
+        if zmq_addr:
+            guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+        else:
+            print('ERROR: guac_socket or ZMQ address must be provided to guacd_create_client')
 
     # Associate new client
     client_ptr = guac_client_alloc()
@@ -81,7 +90,7 @@ def guacd_create_client(socket: POINTER(guac_socket), protocol: bytes):
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user.socket = socket
+    user.socket = guac_sock
     user.client = client_ptr
     user.owner = 1
     # Extra debug
@@ -97,5 +106,7 @@ def guacd_create_client(socket: POINTER(guac_socket), protocol: bytes):
         )
 
     # Clean up
+    if zmq_addr:
+        guac_socket_free(guac_sock)
     guac_user_free(user_ptr)
     cleanup_client(client_ptr)

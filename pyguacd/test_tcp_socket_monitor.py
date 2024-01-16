@@ -43,7 +43,7 @@ class TcpServer:
     async def handle(self, reader: StreamReader, writer: StreamWriter):
         self.srv_reader, self.srv_writer = reader, writer
         if self.use_zmq:
-            self.zmq_connect = self.zmq_context.socket(zmq.SUB)
+            self.zmq_connect = self.zmq_context.socket(zmq.PAIR)
             self.zmq_connect.bind('tcp://0.0.0.0:8892')
             self.zmq_ready = self.zmq_context.socket(zmq.PAIR)
             self.zmq_ready.connect('tcp://127.0.0.1:8891')

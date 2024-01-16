@@ -1,11 +1,14 @@
 import socket
 import threading
 from ctypes import cast, c_char_p, c_int, POINTER
+from typing import Optional
+
+import zmq
 
 from . import libguac_wrapper
 from .libguac_wrapper import (
     String, guac_parser_alloc, guac_parser_expect, guac_parser_free,
-    guac_socket, guac_socket_free, guac_socket_write_string
+    guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_write_string
 )
 from .client import guacd_create_client
 from .parser import parse_identifier
@@ -39,7 +42,7 @@ def guacd_add_user(proc: GuacdProc, parser, gsock, sock) -> int:
     #     data = user_socket.recv()
 
 
-def guacd_route_connection(gsock: POINTER(guac_socket)) -> int:
+def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Optional[str] = None) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -53,19 +56,25 @@ def guacd_route_connection(gsock: POINTER(guac_socket)) -> int:
     @param map
         The map of existing client processes.
 
-    @param gsock
+    @param guac_sock
         The socket associated with the new connection that must be routed to
         a new or existing process within the given map.
 
-    @param sock
-        Python socket object
+    @param zmq_addr
+        ZeroMQ address for use in creating a new guac_socket to the new connection that will be routed
 
     @return
         Zero if the connection was successfully routed, non-zero if routing has
         failed.
     """
+    if guac_sock is None:
+        if zmq_addr:
+            guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+        else:
+            print('ERROR: guac_socket or ZMQ address must be provided to guacd_route_connection')
+
     parser_ptr = guac_parser_alloc()
-    identifier = parse_identifier(parser_ptr, gsock)
+    identifier = parse_identifier(parser_ptr, guac_sock)
     if identifier is None:
         guac_parser_free(parser_ptr)
         return 1
@@ -80,8 +89,12 @@ def guacd_route_connection(gsock: POINTER(guac_socket)) -> int:
     else:
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier.decode()}"')
 
+        if zmq_addr:
+            guac_socket_free(guac_sock)
+            guac_sock = None
+
         # Create new client in the same process
-        guacd_create_client(gsock, identifier)
+        guacd_create_client(identifier, zmq_addr=zmq_addr)
 
         # Create new process
         # proc = guacd_create_proc(identifier)
