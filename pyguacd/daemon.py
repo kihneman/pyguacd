@@ -74,24 +74,18 @@ def zmq_no_async(host='0.0.0.0', port=8892):
 
 def zmq_connection_ready(zmq_monitor: zmq.Socket):
     print('Waiting for connection...')
-    zmq_monitor.poll()
-    mon_msg = parse_monitor_message(zmq_monitor.recv_multipart())
-    if mon_msg.get('event') == zmq.Event.ACCEPTED:
+    for expected in (zmq.Event.LISTENING, zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED):
+        zmq_monitor.poll()
         mon_msg = parse_monitor_message(zmq_monitor.recv_multipart())
-        if mon_msg.get('event') == zmq.Event.HANDSHAKE_SUCCEEDED:
-            print('Connection received')
-            return True
-        else:
-            event = mon_msg.get('event')
-            event_name = event.name if isinstance(event, zmq.Event) else event
-            print(f'Expected "{zmq.Event.HANDSHAKE_SUCCEEDED.name}" but got "{event_name}"')
-    else:
         event = mon_msg.get('event')
-        event_name = event.name if isinstance(event, zmq.Event) else event
-        print(f'Expected "{zmq.Event.ACCEPTED.name}" but got "{event_name}"')
+        if event != expected:
+            event_name = event.name if isinstance(event, zmq.Event) else event
+            print(f'Expected "{expected.name}" but got "{event_name}"')
+            print('ZMQ connection error')
+            return False
 
-    print('Connection error')
-    return False
+    print('ZMQ ready for connection')
+    return True
 
 
 if __name__ == '__main__':
