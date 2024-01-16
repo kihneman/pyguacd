@@ -83,10 +83,12 @@ def zmq_connection_ready(zmq_monitor: zmq.Socket):
             return True
         else:
             event = mon_msg.get('event')
-            print(f'Expected "{zmq.Event.HANDSHAKE_SUCCEEDED}" but got "{event}"')
+            event_name = event.name if isinstance(event, zmq.Event) else event
+            print(f'Expected "{zmq.Event.HANDSHAKE_SUCCEEDED.name}" but got "{event_name}"')
     else:
         event = mon_msg.get('event')
-        print(f'Expected "{zmq.Event.ACCEPTED}" but got "{event}"')
+        event_name = event.name if isinstance(event, zmq.Event) else event
+        print(f'Expected "{zmq.Event.ACCEPTED.name}" but got "{event_name}"')
 
     print('Connection error')
     return False
