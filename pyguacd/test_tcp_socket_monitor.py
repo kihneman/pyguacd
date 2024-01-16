@@ -35,9 +35,10 @@ class TcpServer:
         if self.use_zmq:
             self.zmq_connect.close()
             self.zmq_ready.close()
+            await self.srv_writer.wait_closed()
         else:
             self.conn_writer.close()
-        await gather(create_task(self.srv_writer.wait_closed()), create_task(self.conn_writer.wait_closed()))
+            await gather(create_task(self.srv_writer.wait_closed()), create_task(self.conn_writer.wait_closed()))
 
     async def handle(self, reader: StreamReader, writer: StreamWriter):
         self.srv_reader, self.srv_writer = reader, writer
