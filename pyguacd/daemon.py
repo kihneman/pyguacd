@@ -81,6 +81,12 @@ def zmq_connection_ready(zmq_monitor: zmq.Socket):
         if mon_msg.get('event') == zmq.Event.HANDSHAKE_SUCCEEDED:
             print('Connection received')
             return True
+        else:
+            event = mon_msg.get('event')
+            print(f'Expected "{zmq.Event.HANDSHAKE_SUCCEEDED}" but got "{event}"')
+    else:
+        event = mon_msg.get('event')
+        print(f'Expected "{zmq.Event.ACCEPTED}" but got "{event}"')
 
     print('Connection error')
     return False
