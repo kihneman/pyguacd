@@ -6,6 +6,7 @@ from threading import Thread
 
 import zmq
 from zmq.devices import ThreadProxy
+from zmq.utils.monitor import parse_monitor_message
 
 from . import test_tcp_socket_monitor
 from .connection import guacd_route_connection
@@ -66,9 +67,23 @@ def socket_no_async():
     guacd_route_connection(guac_socket)
 
 
-def zmq_no_async():
-    zmq_sock = guac_socket_create_zmq(zmq.STREAM, f'tcp://{GUACD_DEFAULT_BIND_HOST}:{GUACD_DEFAULT_BIND_PORT}', True)
+def zmq_no_async(host='0.0.0.0', port=8892):
+    zmq_sock = guac_socket_create_zmq(zmq.PAIR, f'tcp://{host}:{port}', False)
     guacd_route_connection(zmq_sock)
+
+
+def zmq_connection_ready(zmq_monitor: zmq.Socket):
+    print('Waiting for connection...')
+    zmq_monitor.poll()
+    mon_msg = parse_monitor_message(zmq_monitor.recv_multipart())
+    if mon_msg.get('event') == zmq.Event.ACCEPTED:
+        mon_msg = parse_monitor_message(zmq_monitor.recv_multipart())
+        if mon_msg.get('event') == zmq.Event.HANDSHAKE_SUCCEEDED:
+            print('Connection received')
+            return True
+
+    print('Connection error')
+    return False
 
 
 if __name__ == '__main__':
@@ -86,6 +101,15 @@ if __name__ == '__main__':
         else:
             socket_no_async()
     elif args.zmq_no_async:
-        zmq_no_async()
+        ctx = zmq.Context()
+        zmq_ready = ctx.socket(zmq.PAIR)
+        zmq_mon = zmq_ready.get_monitor_socket()
+        zmq_ready.bind('tcp://0.0.0.0:8891')
+
+        t = Thread(target=test_tcp_socket_monitor.main, kwargs={'use_zmq': True})
+        t.start()
+
+        if zmq_connection_ready(zmq_mon):
+            zmq_no_async('0.0.0.0', 8892)
     else:
         asyncio.run(main(timeout=args.timeout))
