@@ -19,6 +19,11 @@ class TcpServer:
     srv_writer: Optional[StreamWriter] = None
     zmq_output: Optional[zmq.asyncio.Socket] = None
 
+    def __post_init__(self):
+        ctx = zmq.asyncio.Context()
+        self.zmq_output = ctx.socket(zmq.PAIR)
+        self.zmq_output.bind('tcp:0.0.0.0:8890')
+
     async def close(self):
         await self.zmq_output.send(b'Close the connection')
         self.zmq_output.close()
@@ -27,9 +32,6 @@ class TcpServer:
         await gather(create_task(self.srv_writer.wait_closed()), create_task(self.conn_writer.wait_closed()))
 
     async def handle(self, reader: StreamReader, writer: StreamWriter):
-        ctx = zmq.asyncio.Context()
-        self.zmq_output = ctx.socket(zmq.PAIR)
-        self.zmq_output.bind('tcp:0.0.0.0:8890')
         self.srv_reader, self.srv_writer = reader, writer
         self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', int(GUACD_DEFAULT_BIND_PORT))
         await asyncio.wait(
@@ -92,7 +94,6 @@ async def run_server():
             await server.serve_forever()
         except asyncio.exceptions.CancelledError:
             print('Server closed')
-
 
 def main():
     asyncio.run(run_server())
