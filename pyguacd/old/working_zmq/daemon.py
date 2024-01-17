@@ -75,7 +75,7 @@ def zmq_no_async(host='0.0.0.0', port=8892):
 def zmq_connection_ready(zmq_status: zmq.Socket):
     zmq_status_mon = zmq_status.get_monitor_socket()
     print('Waiting for connection...')
-    for expected in (zmq.Event.LISTENING, zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED):
+    for expected in (zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED):
         zmq_status_mon.poll()
         mon_msg = parse_monitor_message(zmq_status_mon.recv_multipart())
         event = mon_msg.get('event')
