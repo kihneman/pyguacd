@@ -119,6 +119,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
     #     owner = 0
 
     proc.bind()
+    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Listening on "{proc.zmq_socket_addr}"')
     proc_ready_event.set()
 
     user_socket_addr = proc.recv_user_socket_addr()

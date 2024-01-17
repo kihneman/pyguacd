@@ -86,6 +86,8 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
             return 1
         new_process = 1
 
-    proc.send_user_socket_addr(zmq)
+    proc.connect()
+    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connected to "{proc.zmq_socket_addr}"')
+    proc.send_user_socket_addr(zmq_addr)
     guac_parser_free(parser_ptr)
     return 0
