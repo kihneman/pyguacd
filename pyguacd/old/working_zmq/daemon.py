@@ -11,12 +11,12 @@ from . import test_tcp_socket_monitor
 from ..single_connection.connection import guacd_route_connection
 from ...constants import (
     GUACD_CONTROL_SOCKET_PATH, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT,
-    GUACD_ROUTER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
+    GUACD_ROUTER_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
 )
 from ...libguac_wrapper import guac_socket_create_zmq, guac_socket_open
 from .router import launch_router
 from .user_proxy import run_tcp_proxy_in_loop, start_tcp_proxy_server
-from .zmq_utils import zmq_connection_ready
+from .zmq_utils import new_ipc_addr, zmq_connection_ready
 
 
 def create_zmq_control_pub():
@@ -92,10 +92,13 @@ if __name__ == '__main__':
         zmq_ready = ctx.socket(zmq.PAIR)
         zmq_ready.bind('tcp://0.0.0.0:8891')
 
-        t = Thread(target=test_tcp_socket_monitor.main, kwargs={'use_zmq': True})
+        proc_map = {}
+        user_ipc_addr = new_ipc_addr(GUACD_USER_SOCKET_PATH)
+        kwargs = dict(zmq_connect_addr=user_ipc_addr, use_zmq=True)
+        t = Thread(target=test_tcp_socket_monitor.main, kwargs=kwargs)
         t.start()
 
         if zmq_connection_ready(zmq_ready, create_monitor=True):
-            zmq_no_async('0.0.0.0', 8892)
+            guacd_route_connection(proc_map, zmq_addr=user_ipc_addr)
     else:
         asyncio.run(main(timeout=args.timeout))
