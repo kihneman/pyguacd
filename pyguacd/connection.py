@@ -71,7 +71,7 @@ def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = Non
 
     # Otherwise, create new client
     else:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier.decode()}"')
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
 
         if zmq_addr:
             guac_socket_free(guac_sock)
@@ -91,7 +91,7 @@ def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = Non
         # Add to proc_map
         client_ptr = proc.client_ptr
         client = client_ptr.contents
-        proc_map[client.connection_id] = proc
+        proc_map[str(client.connection_id)] = proc
 
     proc.connect()
     guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connected to "{proc.zmq_socket_addr}"')

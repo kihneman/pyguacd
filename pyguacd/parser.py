@@ -41,6 +41,6 @@ def parse_identifier(guac_sock: POINTER(guac_socket), zmq_addr: Optional[str] = 
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Bad number of arguments to "select" ({parser.argc})')
         return None
 
-    identifier = bytes(cast(parser.argv[0], c_char_p).value)
+    identifier = bytes(cast(parser.argv[0], c_char_p).value).decode()
     guac_parser_free(parser_ptr)
     return identifier

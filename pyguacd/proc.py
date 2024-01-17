@@ -79,7 +79,7 @@ def cleanup_client(client):
     # }
 
 
-def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
+def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: Event):
     # Connect to socket for receiving new users
     # proc.connect()
 
@@ -93,12 +93,12 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
     client = client_ptr.contents
 
     # Init client for selected protocol
-    if guac_client_load_plugin(client_ptr, String(protocol)):
+    if guac_client_load_plugin(client_ptr, protocol):
         # Log error
         guac_error = libguac_wrapper.__guac_error()[0]
         if guac_error == GuacStatus.GUAC_STATUS_NOT_FOUND:
             guacd_log(
-                GuacClientLogLevel.GUAC_LOG_WARNING, f'Support for protocol "{protocol.decode()}" is not installed'
+                GuacClientLogLevel.GUAC_LOG_WARNING, f'Support for protocol "{protocol}" is not installed'
             )
         else:
             guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, 'Unable to load client plugin')
@@ -153,7 +153,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
     cleanup_client(client_ptr)
 
 
-def guacd_create_proc(protocol: bytes, zmq_context: zmq.Context = None):
+def guacd_create_proc(protocol: str, zmq_context: zmq.Context = None):
     ctx = zmq.Context() if zmq_context is None else zmq_context
 
     # Associate new client
