@@ -1,4 +1,5 @@
 from ctypes import cast, c_char_p, c_int, POINTER
+from typing import Optional
 
 from . import libguac_wrapper
 from .constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
@@ -6,7 +7,8 @@ from .libguac_wrapper import String, guac_parser, guac_parser_alloc, guac_parser
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 
 
-def parse_identifier(parser_ptr: POINTER(guac_parser), guac_sock: POINTER(guac_socket)):
+def parse_identifier(guac_sock: POINTER(guac_socket), zmq_addr: Optional[str] = None):
+    parser_ptr = guac_parser_alloc()
     parser = parser_ptr.contents
 
     # Reset guac_error
@@ -39,5 +41,6 @@ def parse_identifier(parser_ptr: POINTER(guac_parser), guac_sock: POINTER(guac_s
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Bad number of arguments to "select" ({parser.argc})')
         return None
 
-    identifier: bytes = cast(parser.argv[0], c_char_p).value
+    identifier = bytes(cast(parser.argv[0], c_char_p).value)
+    guac_parser_free(parser_ptr)
     return identifier

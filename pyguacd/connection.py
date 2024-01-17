@@ -5,18 +5,18 @@ from typing import Optional
 
 import zmq
 
-from ... import libguac_wrapper
-from ...libguac_wrapper import (
+from . import libguac_wrapper
+from .constants import (
+    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT, GUACD_USER_SOCKET_PATH
+)
+from .libguac_wrapper import (
     String, guac_parser_alloc, guac_parser_expect, guac_parser_free,
     guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_write_string
 )
-from .client import guacd_create_client
-from ...constants import (
-    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT, GUACD_USER_SOCKET_PATH
-)
-from ...log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
-from ...parser import parse_identifier
-from ..working_zmq.proc import guacd_create_proc
+from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
+from .parser import parse_identifier
+from .proc import guacd_create_proc
+from old.single_connection.client import guacd_create_client
 
 
 def guac_socket_cleanup(guac_socket):
@@ -55,10 +55,8 @@ def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = Non
         else:
             print('ERROR: guac_socket or ZMQ address must be provided to guacd_route_connection')
 
-    parser_ptr = guac_parser_alloc()
-    identifier = parse_identifier(parser_ptr, guac_sock)
+    identifier = parse_identifier(guac_sock)
     if identifier is None:
-        guac_parser_free(parser_ptr)
         return 1
 
     # If connection ID, retrieve existing process
@@ -67,7 +65,6 @@ def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = Non
 
         if proc is None:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{identifier}" does not exist')
-            guac_parser_free(parser_ptr)
             return 1
         else:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Found existing connection "{identifier}"')
@@ -101,5 +98,4 @@ def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = Non
     proc.send_user_socket_addr(zmq_addr)
     proc.zmq_socket.close()
 
-    guac_parser_free(parser_ptr)
     return 0

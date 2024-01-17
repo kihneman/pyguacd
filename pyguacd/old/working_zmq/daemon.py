@@ -8,7 +8,7 @@ import zmq
 from zmq.devices import ThreadProxy
 
 from . import test_tcp_socket_monitor
-from ..single_connection.connection import guacd_route_connection
+from ...connection import guacd_route_connection
 from ...constants import (
     GUACD_CONTROL_SOCKET_PATH, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT,
     GUACD_ROUTER_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH
@@ -100,5 +100,6 @@ if __name__ == '__main__':
 
         if zmq_connection_ready(zmq_ready, create_monitor=True):
             guacd_route_connection(proc_map, zmq_addr=user_ipc_addr)
+            print('Finished routing connection')
     else:
         asyncio.run(main(timeout=args.timeout))

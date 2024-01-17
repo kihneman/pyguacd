@@ -6,17 +6,17 @@ from typing import Optional
 
 import zmq
 
-from ... import libguac_wrapper, log
-from ...libguac_wrapper import (
+from . import libguac_wrapper, log
+from .libguac_wrapper import (
     String, guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
     guac_socket, guac_socket_create_zmq, guac_socket_require_keep_alive,
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
-from ...constants import (
+from .constants import (
     GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_USEC_TIMEOUT
 )
-from ...log import guacd_log, guacd_log_guac_error
-from .zmq_utils import new_ipc_addr, zmq_connection_ready, ZsockStatus
+from .log import guacd_log, guacd_log_guac_error
+from .utils.zmq import new_ipc_addr
 
 
 @dataclass
