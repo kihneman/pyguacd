@@ -16,7 +16,7 @@ from .libguac_wrapper import (
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .parser import parse_identifier
 from .proc import guacd_create_proc
-from old.single_connection.client import guacd_create_client
+from .old.single_connection.client import guacd_create_client
 
 
 def guac_socket_cleanup(guac_socket):
