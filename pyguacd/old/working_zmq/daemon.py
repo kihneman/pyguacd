@@ -68,8 +68,9 @@ def socket_no_async():
 
 
 def zmq_no_async(host='0.0.0.0', port=8892):
-    # zmq_sock = guac_socket_create_zmq(zmq.PAIR, f'tcp://{host}:{port}', False)
-    guacd_route_connection(zmq_addr=f'tcp://{host}:{port}')
+    zmq_sock = guac_socket_create_zmq(zmq.PAIR, f'tcp://{host}:{port}', False)
+    guacd_route_connection(zmq_sock)
+    # guacd_route_connection(zmq_addr=f'tcp://{host}:{port}')
 
 
 if __name__ == '__main__':

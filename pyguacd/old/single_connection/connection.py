@@ -75,8 +75,10 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
             guac_socket_free(guac_sock)
             guac_sock = None
 
-        # Create new client in the same process
-        guacd_create_client(identifier, zmq_addr=zmq_addr)
+            # Create new client in the same process
+            guacd_create_client(identifier, zmq_addr=zmq_addr)
+        else:
+            guacd_create_client(identifier, guac_sock)
 
         # Create new process
         # proc = guacd_create_proc(identifier)
