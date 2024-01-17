@@ -11,35 +11,17 @@ from ...libguac_wrapper import (
     guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_write_string
 )
 from .client import guacd_create_client
-from ...parser import parse_identifier
-from ..working_zmq.proc import GuacdProc, guacd_create_proc
-from ...constants import GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT
+from ...constants import (
+    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT, GUACD_USER_SOCKET_PATH
+)
 from ...log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
-from ..working_zmq.tcp_zmq_proxy import launch_proxy
+from ...parser import parse_identifier
+from ..working_zmq.proc import guacd_create_proc
 
 
 def guac_socket_cleanup(guac_socket):
     print('Cleaning up guac socket...')
     guac_socket_free(guac_socket)
-
-
-def guacd_add_user(proc: GuacdProc, parser, gsock, sock) -> int:
-    # Wait for process to be ready
-    proc.connect_user()
-    proc.wait_for_client()
-
-    # Send user zmq socket to process
-    ipc_socket_path = proc.send_new_user_socket()
-    t = threading.Thread(target=launch_proxy, args=(ipc_socket_path, sock, guac_socket_cleanup, (gsock,)))
-    t.start()
-    proc.send_new_user_socket()
-
-    # Handle I/O from process to user
-    # user_socket = proc.zmq_user_socket
-    # data = user_socket.recv()
-    # while len(data) > 0:
-    #     guac_socket_write_string(gsock, String(data))
-    #     data = user_socket.recv()
 
 
 def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Optional[str] = None) -> int:
@@ -98,8 +80,10 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
 
         # Create new process
         # proc = guacd_create_proc(identifier)
+        # if proc is None:
+        #     return 1
         new_process = 1
 
-    # guacd_add_user(proc, parser_ptr, gsock, sock)
+    # proc.send_user_socket_addr(zmq)
     guac_parser_free(parser_ptr)
     return 0

@@ -6,7 +6,6 @@ from threading import Thread
 
 import zmq
 from zmq.devices import ThreadProxy
-from zmq.utils.monitor import parse_monitor_message
 
 from . import test_tcp_socket_monitor
 from ..single_connection.connection import guacd_route_connection
@@ -17,6 +16,7 @@ from ...constants import (
 from ...libguac_wrapper import guac_socket_create_zmq, guac_socket_open
 from .router import launch_router
 from .user_proxy import run_tcp_proxy_in_loop, start_tcp_proxy_server
+from .zmq_utils import zmq_connection_ready
 
 
 def create_zmq_control_pub():
@@ -72,27 +72,6 @@ def zmq_no_async(host='0.0.0.0', port=8892):
     guacd_route_connection(zmq_addr=f'tcp://{host}:{port}')
 
 
-def zmq_connection_ready(zmq_status: zmq.Socket):
-    zmq_status_mon = zmq_status.get_monitor_socket()
-    print('Waiting for connection...')
-    for expected in (zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED):
-        zmq_status_mon.poll()
-        mon_msg = parse_monitor_message(zmq_status_mon.recv_multipart())
-        event = mon_msg.get('event')
-        if event != expected:
-            event_name = event.name if isinstance(event, zmq.Event) else event
-            print(f'Expected "{expected.name}" but got "{event_name}"')
-            print('ZMQ connection error')
-            return False
-
-    if zmq_status.recv() == b'ready':
-        print('ZMQ ready for connection')
-        return True
-    else:
-        print('ZMQ returned unknown status message')
-        return False
-
-
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('-t', '--timeout', type=int)
@@ -115,7 +94,7 @@ if __name__ == '__main__':
         t = Thread(target=test_tcp_socket_monitor.main, kwargs={'use_zmq': True})
         t.start()
 
-        if zmq_connection_ready(zmq_ready):
+        if zmq_connection_ready(zmq_ready, create_monitor=True):
             zmq_no_async('0.0.0.0', 8892)
     else:
         asyncio.run(main(timeout=args.timeout))

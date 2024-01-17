@@ -16,7 +16,7 @@ from ...constants import (
     GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USER_SOCKET_PATH, GUACD_USEC_TIMEOUT
 )
 from ...log import guacd_log, guacd_log_guac_error
-from .zmq_utils import new_ipc_addr, ZsockStatus
+from .zmq_utils import new_ipc_addr, zmq_connection_ready, ZsockStatus
 
 
 @dataclass
@@ -28,40 +28,29 @@ class GuacdProc:
     process: Optional[Process] = None
     zmq_context: Optional[zmq.Context] = None
     zmq_socket: Optional[zmq.Socket] = None
+    # zmq_socket_monitor: Optional[zmq.Socket] = None
 
-    def bind(self, zmq_context):
-        """Create and bind to process zmq_socket
-
-        Not setting the socket property allows this method to be run before copying to another process
-        """
-        zmq_socket = zmq_context.socket(zmq.PAIR)
-        zmq_socket.bind(self.zmq_socket_addr)
-        return zmq_socket
+    def bind(self, context=None):
+        """Create and bind to process zmq_socket"""
+        self.zmq_context = zmq.Context() if context is None else context
+        self.zmq_socket = self.zmq_context.socket(zmq.SUB)
+        self.zmq_socket.subscribe('')
+        self.zmq_socket.bind(self.zmq_socket_addr)
 
     def connect(self, context=None):
         """Create and connect to process zmq_socket"""
         self.zmq_context = zmq.Context() if context is None else context
-        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+        self.zmq_socket = self.zmq_context.socket(zmq.PUB)
         self.zmq_socket.connect(self.zmq_socket_addr)
 
-    def client_ready(self):
-        """Send process ready over socket"""
-        self.zmq_socket.send_multipart((b'status', ZsockStatus.CLIENT_READY.value))
-
     def recv_user_socket_addr(self) -> bytes:
-        user_socket_addr = self.zmq_socket.recv()
-        # resp_status = ZsockStatus.USER_SOCKET_RECV if user_socket_path else ZsockStatus.USER_SOCKET_ERROR
-        # self.zmq_socket.send_multipart({b'status': resp_status})
-        return user_socket_addr
+        _, user_socket_addr = self.zmq_socket.recv()
+        return user_socket_addr.decode()
 
-    # def send_new_user_socket(self, create_zsock=False):
-    #     user_socket_path = self.set_user_socket_path()
-    #     if create_zsock:
-    #         self.zmq_user_socket = self.zmq_context.socket(zmq.PAIR)
-    #         self.zmq_user_socket.bind(user_socket_path)
-    #     self.zmq_socket.send_json({'user_socket_path': user_socket_path})
-    #     self.wait_for_status(ZsockStatus.USER_SOCKET_RECV)
-    #     return user_socket_path
+    def send_user_socket_addr(self, user_socket_addr):
+        # Pub sub connections like multipart messages with (topic, message)
+        # Including topic just to be safe
+        self.zmq_socket.send_multipart((b'user_socket_addr', user_socket_addr.encode()))
 
 
 def cleanup_client(client):
@@ -86,9 +75,9 @@ def cleanup_client(client):
     # }
 
 
-def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
+def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
     # Connect to socket for receiving new users
-    proc.connect()
+    # proc.connect()
 
     # Temp debug for new add user
     # proc.client_ready()
@@ -129,11 +118,14 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     #     # Future file descriptors are not owners
     #     owner = 0
 
-    proc.client_ready()
+    proc.bind()
+    proc_ready_event.set()
+
+    user_socket_addr = proc.recv_user_socket_addr()
+    # while len(user_socket_addr) > 0:
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user_socket_addr = String(proc.recv_user_socket_addr())
     user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
     user.client = client_ptr
     user.owner = 1
@@ -154,17 +146,25 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes):
     cleanup_client(client_ptr)
 
 
-def guacd_create_proc(protocol: bytes, zmq_context):
+def guacd_create_proc(protocol: bytes, zmq_context: zmq.Context = None):
+    ctx = zmq.Context() if zmq_context is None else zmq_context
+
     # Associate new client
     proc = GuacdProc(guac_client_alloc())
-    zmq_socket = proc.bind(zmq_context)
 
     # Init logging
     # client.log_handler = pointer(ctypes_wrapper.guac_client_log_handler(log.guacd_client_log))
 
-    proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
+    proc_ready_event = Event()
+    proc.process = Process(target=guacd_exec_proc, args=(proc, protocol, proc_ready_event))
     proc.process.start()
 
-    # Set properties not passed to new process
-    proc.zmq_socket = zmq_socket
-    return proc
+    # Wait for process to be ready
+    proc_ready_event.wait(2)
+    if proc_ready_event.is_set():
+        return proc
+    else:
+        print('ERROR: Client process failed to start')
+        proc.process.kill()
+        proc.process.close()
+        return None

@@ -4,6 +4,7 @@ from uuid import uuid4
 import zmq
 import zmq.asyncio
 from zmq.devices import ThreadProxy
+from zmq.utils.monitor import parse_monitor_message
 
 
 class ZsockStatus(Enum):
@@ -32,6 +33,27 @@ def new_ipc_addr_pair(base_path, with_mon=False):
     if with_mon:
         result.append(f'{ipc}-mon')
     return result
+
+
+def zmq_connection_ready(zmq_socket: zmq.Socket, create_monitor=False):
+    zmq_monitor = zmq_socket.get_monitor_socket() if create_monitor else zmq_socket
+    print('Waiting for connection...')
+    for expected in (zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED):
+        zmq_monitor.poll()
+        mon_msg = parse_monitor_message(zmq_monitor.recv_multipart())
+        event = mon_msg.get('event')
+        if event != expected:
+            event_name = event.name if isinstance(event, zmq.Event) else event
+            print(f'Expected "{expected.name}" but got "{event_name}"')
+            print('ZMQ connection error')
+            return False
+
+    if zmq_socket.recv() == b'ready':
+        print('ZMQ ready for connection')
+        return True
+    else:
+        print('ZMQ returned unknown status message')
+        return False
 
 
 class ZmqThreadProxy:
