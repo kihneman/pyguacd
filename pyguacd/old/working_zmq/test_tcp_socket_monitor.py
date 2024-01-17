@@ -19,6 +19,7 @@ class TcpServer:
     srv_writer: Optional[StreamWriter] = None
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_connect: Optional[zmq.asyncio.Socket] = None
+    zmq_connect_addr: Optional[str] = None
     zmq_monitor: Optional[zmq.asyncio.Socket] = None
     zmq_status: Optional[zmq.asyncio.Socket] = None
     use_zmq: bool = False
@@ -47,7 +48,7 @@ class TcpServer:
         self.srv_reader, self.srv_writer = reader, writer
         if self.use_zmq:
             self.zmq_connect = self.zmq_context.socket(zmq.PAIR)
-            self.zmq_connect.bind('tcp://0.0.0.0:8892')
+            self.zmq_connect.bind(self.zmq_connect_addr)
             self.zmq_status = self.zmq_context.socket(zmq.PAIR)
             self.zmq_status.connect('tcp://127.0.0.1:8891')
             await self.zmq_status.send(b'ready')
@@ -71,8 +72,9 @@ class TcpServer:
             message = data.decode()
 
             if self.use_zmq_mon:
-                await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
-                await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
+                if not self.use_zmq:
+                    await self.zmq_monitor.send(f'Received from {from_addr}...'.encode())
+                await self.zmq_monitor.send(f'Sending to {to_addr}: {message}'.encode())
 
             self.srv_writer.write(data)
             await self.srv_writer.drain()
@@ -92,7 +94,8 @@ class TcpServer:
 
             if self.use_zmq_mon:
                 await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
-                await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
+                if not self.use_zmq:
+                    await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
 
             if self.use_zmq:
                 await self.zmq_connect.send(data)

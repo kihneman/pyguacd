@@ -24,7 +24,7 @@ def guac_socket_cleanup(guac_socket):
     guac_socket_free(guac_socket)
 
 
-def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Optional[str] = None) -> int:
+def guacd_route_connection(proc_map: dict, guac_sock: POINTER(guac_socket) = None, zmq_addr: Optional[str] = None) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -35,7 +35,7 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
     The socket provided will be automatically freed when the connection
     terminates unless routing fails, in which case non-zero is returned.
 
-    @param map
+    @param proc_map
         The map of existing client processes.
 
     @param guac_sock
@@ -63,9 +63,14 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
 
     # If connection ID, retrieve existing process
     if identifier[0] == GUAC_CLIENT_ID_PREFIX:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, 'Selecting existing connection not implemented')
-        guac_parser_free(parser_ptr)
-        return 1
+        proc = proc_map.get(identifier)
+
+        if proc is None:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{identifier}" does not exist')
+            guac_parser_free(parser_ptr)
+            return 1
+        else:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Found existing connection "{identifier}"')
 
     # Otherwise, create new client
     else:
@@ -86,8 +91,15 @@ def guacd_route_connection(guac_sock: POINTER(guac_socket) = None, zmq_addr: Opt
             return 1
         new_process = 1
 
+        # Add to proc_map
+        client_ptr = proc.client_ptr
+        client = client_ptr.contents
+        proc_map[client.connection_id] = proc
+
     proc.connect()
     guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connected to "{proc.zmq_socket_addr}"')
     proc.send_user_socket_addr(zmq_addr)
+    proc.zmq_socket.close()
+
     guac_parser_free(parser_ptr)
     return 0
