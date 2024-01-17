@@ -122,6 +122,8 @@ def guacd_exec_proc(proc: GuacdProc, protocol: bytes, proc_ready_event: Event):
     proc_ready_event.set()
 
     user_socket_addr = proc.recv_user_socket_addr()
+    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Received user_socket_addr "{user_socket_addr}"')
+
     # while len(user_socket_addr) > 0:
     # Create skeleton user (guacd_user_thread())
     user_ptr = guac_user_alloc()
@@ -162,6 +164,7 @@ def guacd_create_proc(protocol: bytes, zmq_context: zmq.Context = None):
     # Wait for process to be ready
     proc_ready_event.wait(2)
     if proc_ready_event.is_set():
+        print('Client process started')
         return proc
     else:
         print('ERROR: Client process failed to start')
