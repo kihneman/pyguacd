@@ -22,15 +22,18 @@ class TcpServer:
     zmq_monitor: Optional[zmq.asyncio.Socket] = None
     zmq_status: Optional[zmq.asyncio.Socket] = None
     use_zmq: bool = False
+    use_zmq_mon: bool = False
 
     def __post_init__(self):
         self.zmq_context = zmq.asyncio.Context()
-        self.zmq_monitor = self.zmq_context.socket(zmq.PAIR)
-        self.zmq_monitor.bind('tcp://0.0.0.0:8890')
+        if self.use_zmq_mon:
+            self.zmq_monitor = self.zmq_context.socket(zmq.PAIR)
+            self.zmq_monitor.bind('tcp://0.0.0.0:8890')
 
     async def close(self):
-        await self.zmq_monitor.send(b'Close the connection')
-        self.zmq_monitor.close()
+        if self.use_zmq_mon:
+            await self.zmq_monitor.send(b'Close the connection')
+            self.zmq_monitor.close()
         self.srv_writer.close()
         if self.use_zmq:
             self.zmq_connect.close()
@@ -67,8 +70,9 @@ class TcpServer:
                 data = await self.conn_reader.read(1000)
             message = data.decode()
 
-            await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
-            await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
+            if self.use_zmq_mon:
+                await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
+                await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
 
             self.srv_writer.write(data)
             await self.srv_writer.drain()
@@ -86,8 +90,9 @@ class TcpServer:
             data = await self.srv_reader.read(1000)
             message = data.decode()
 
-            await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
-            await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
+            if self.use_zmq_mon:
+                await self.zmq_monitor.send(f'Received from {from_addr}: {message}'.encode())
+                await self.zmq_monitor.send(f'Sending to {to_addr}...'.encode())
 
             if self.use_zmq:
                 await self.zmq_connect.send(data)
