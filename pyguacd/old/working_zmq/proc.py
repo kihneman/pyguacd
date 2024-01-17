@@ -33,24 +33,28 @@ class GuacdProc:
     def bind(self, context=None):
         """Create and bind to process zmq_socket"""
         self.zmq_context = zmq.Context() if context is None else context
-        self.zmq_socket = self.zmq_context.socket(zmq.SUB)
-        self.zmq_socket.subscribe('')
+        # self.zmq_socket = self.zmq_context.socket(zmq.SUB)
+        # self.zmq_socket.subscribe('')
+        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
         self.zmq_socket.bind(self.zmq_socket_addr)
 
     def connect(self, context=None):
         """Create and connect to process zmq_socket"""
         self.zmq_context = zmq.Context() if context is None else context
-        self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+        # self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
         self.zmq_socket.connect(self.zmq_socket_addr)
 
-    def recv_user_socket_addr(self) -> bytes:
-        _, user_socket_addr = self.zmq_socket.recv()
+    def recv_user_socket_addr(self):
+        # _, user_socket_addr = self.zmq_socket.recv_multipart()
+        user_socket_addr = self.zmq_socket.recv()
         return user_socket_addr.decode()
 
     def send_user_socket_addr(self, user_socket_addr):
         # Pub sub connections like multipart messages with (topic, message)
         # Including topic just to be safe
-        self.zmq_socket.send_multipart((b'user_socket_addr', user_socket_addr.encode()))
+        # self.zmq_socket.send_multipart((b'user_socket_addr', user_socket_addr.encode()))
+        self.zmq_socket.send(user_socket_addr.encode())
 
 
 def cleanup_client(client):
