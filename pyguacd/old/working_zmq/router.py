@@ -16,7 +16,7 @@ from ...libguac_wrapper import (
 )
 from ...log import guacd_log
 from ...parser import parse_identifier
-from .proc import guacd_create_proc
+from ...proc import guacd_create_proc
 from .zmq_utils import wait_for_status, ZsockStatus
 
 
