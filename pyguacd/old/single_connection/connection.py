@@ -5,17 +5,17 @@ from typing import Optional
 
 import zmq
 
-from . import libguac_wrapper
-from .libguac_wrapper import (
+from ... import libguac_wrapper
+from ...libguac_wrapper import (
     String, guac_parser_alloc, guac_parser_expect, guac_parser_free,
     guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_write_string
 )
 from .client import guacd_create_client
-from .parser import parse_identifier
-from .proc import GuacdProc, guacd_create_proc
-from .constants import GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT
-from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
-from .tcp_zmq_proxy import launch_proxy
+from ...parser import parse_identifier
+from ..working_zmq.proc import GuacdProc, guacd_create_proc
+from ...constants import GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT
+from ...log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
+from ..working_zmq.tcp_zmq_proxy import launch_proxy
 
 
 def guac_socket_cleanup(guac_socket):

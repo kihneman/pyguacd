@@ -1,11 +1,11 @@
 import socket
 from socket import getaddrinfo, getnameinfo
 
-from .conf import guacd_conf_parse_args
+from ...conf import guacd_conf_parse_args
 from .connection import guacd_route_connection
-from .constants import EXIT_FAILURE, GuacClientLogLevel
-from .libguac_wrapper import guac_socket_free, guac_socket_open
-from .log import guacd_log
+from ...constants import EXIT_FAILURE, GuacClientLogLevel
+from ...libguac_wrapper import guac_socket_free, guac_socket_open
+from ...log import guacd_log
 
 
 def main():

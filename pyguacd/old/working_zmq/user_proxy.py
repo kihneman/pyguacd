@@ -6,12 +6,12 @@ from os import makedirs
 import zmq
 import zmq.asyncio
 
-from .constants import (
+from ...constants import (
     GuacClientLogLevel, ZmqMsgTopic, ZmqMsgVal, GUACD_SOCKET_DEFAULT_DIR,
     GUACD_CONTROL_SOCKET_PATH, GUACD_TCP_PROXY_SOCKET_PATH, GUACD_USER_SOCKET_PATH,
     GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT
 )
-from .log import guacd_log
+from ...log import guacd_log
 from .socket_utils import get_addresses, resolve_hostname, socket_bind
 from .zmq_utils import ZmqThreadProxy
 

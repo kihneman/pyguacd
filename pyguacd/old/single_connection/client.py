@@ -2,14 +2,14 @@ from ctypes import c_int, pointer, POINTER
 
 import zmq
 
-from . import libguac_wrapper, log
-from .libguac_wrapper import (
+from ... import libguac_wrapper, log
+from ...libguac_wrapper import (
     String, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
     guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_require_keep_alive,
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
-from .constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
-from .log import guacd_log, guacd_log_guac_error
+from ...constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
+from ...log import guacd_log, guacd_log_guac_error
 # from .user_handshake import guac_user_handle_connection
 
 

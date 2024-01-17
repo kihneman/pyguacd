@@ -7,7 +7,7 @@ from typing import Optional
 import zmq
 import zmq.asyncio
 
-from .constants import GUACD_DEFAULT_BIND_PORT
+from ...constants import GUACD_DEFAULT_BIND_PORT
 
 
 @dataclass
@@ -20,7 +20,7 @@ class TcpServer:
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_connect: Optional[zmq.asyncio.Socket] = None
     zmq_monitor: Optional[zmq.asyncio.Socket] = None
-    zmq_ready: Optional[zmq.asyncio.Socket] = None
+    zmq_status: Optional[zmq.asyncio.Socket] = None
     use_zmq: bool = False
 
     def __post_init__(self):
@@ -34,7 +34,7 @@ class TcpServer:
         self.srv_writer.close()
         if self.use_zmq:
             self.zmq_connect.close()
-            self.zmq_ready.close()
+            self.zmq_status.close()
             await self.srv_writer.wait_closed()
         else:
             self.conn_writer.close()
@@ -45,8 +45,9 @@ class TcpServer:
         if self.use_zmq:
             self.zmq_connect = self.zmq_context.socket(zmq.PAIR)
             self.zmq_connect.bind('tcp://0.0.0.0:8892')
-            self.zmq_ready = self.zmq_context.socket(zmq.PAIR)
-            self.zmq_ready.connect('tcp://127.0.0.1:8891')
+            self.zmq_status = self.zmq_context.socket(zmq.PAIR)
+            self.zmq_status.connect('tcp://127.0.0.1:8891')
+            await self.zmq_status.send(b'ready')
         else:
             self.conn_reader, self.conn_writer = await asyncio.open_connection('127.0.0.1', int(GUACD_DEFAULT_BIND_PORT))
 

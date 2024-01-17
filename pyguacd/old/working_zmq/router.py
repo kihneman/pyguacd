@@ -7,15 +7,15 @@ from os.path import join
 import zmq
 import zmq.asyncio
 
-from .constants import (
+from ...constants import (
     GuacClientLogLevel, ZmqMsgTopic, GUAC_CLIENT_ID_PREFIX, GUACD_SOCKET_DEFAULT_DIR, GUACD_SOCKET_DIR,
     GUACD_ROUTER_SOCKET_PATH
 )
-from .libguac_wrapper import (
+from ...libguac_wrapper import (
     String, guac_parser_alloc, guac_parser_free, guac_socket_create_zmq, guac_socket_free, guac_socket_select
 )
-from .log import guacd_log
-from .parser import parse_identifier
+from ...log import guacd_log
+from ...parser import parse_identifier
 from .proc import guacd_create_proc
 from .zmq_utils import wait_for_status, ZsockStatus
 

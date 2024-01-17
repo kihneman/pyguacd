@@ -1,8 +1,8 @@
 import socket
 from socket import getaddrinfo, getnameinfo
 
-from .constants import GuacClientLogLevel
-from .log import guacd_log
+from ...constants import GuacClientLogLevel
+from ...log import guacd_log
 
 
 def get_addresses(host, port):
