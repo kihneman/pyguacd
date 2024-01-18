@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import create_task, StreamReader, StreamWriter, Task
+from asyncio import create_task, Semaphore, StreamReader, StreamWriter, Task
 from itertools import count
 
 import zmq
@@ -10,7 +10,8 @@ from .constants import GUACD_USER_SOCKET_PATH
 from .utils.zmq import new_ipc_addr, check_zmq_monitor_events
 
 
-DATA_CHUNK_SIZE = 1000
+CONNECTION_LIMIT = 2 ** 20
+DATA_CHUNK_SIZE = 2 ** 10
 
 
 async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket):
@@ -57,8 +58,7 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, zmq_to_tcp_
 class TcpConnectionServer:
     # Class properties for tracking connections
     _conn_id = count(1)
-    _close_count = count(1)
-    closed_count = 0
+    connections_left = Semaphore(CONNECTION_LIMIT)
     total_connections = 0
     proc_map = dict()
 
@@ -78,21 +78,23 @@ class TcpConnectionServer:
             create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
             create_task(guacd_route_connection(self.proc_map, zmq_user_addr, self.zmq_context)),
         ])
-        self.closed_count = next(self._close_count)
-        print(
-            f'Finished connection #{self.conn_id}. Remaining open connections: {self.open_connections()}'
-        )
 
     def open_connections(self):
-        return self.total_connections - self.closed_count
+        return CONNECTION_LIMIT - self.connections_left._value
 
     @classmethod
     async def handle(cls, tcp_reader: StreamReader, tcp_writer: StreamWriter):
         new_tcp = cls()
+
+        async with new_tcp.connections_left.acquire():
+            print(
+                f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections()}'
+            )
+            await new_tcp.handle_connection(tcp_reader, tcp_writer)
+
         print(
-            f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections()}'
+            f'Finished connection #{new_tcp.conn_id}. Remaining open connections: {new_tcp.open_connections()}'
         )
-        await new_tcp.handle_connection(tcp_reader, tcp_writer)
 
     @classmethod
     async def start(cls):
