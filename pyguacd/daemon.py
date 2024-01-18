@@ -33,7 +33,7 @@ async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWr
         await tcp_writer.drain()
 
 
-async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket):
+async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, zmq_to_tcp_task: Task):
     zmq_events = [zmq.Event.LISTENING, zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
     if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events):
         print('Parsed connection identifier')
@@ -44,6 +44,13 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket):
             print('Connection terminated unexpectedly')
     else:
         print('Connection parsing terminated unexpectedly')
+
+    # Prevent handle_zmq_to_tcp function from waiting forever to read on a closed socket
+    if not zmq_to_tcp_task.done():
+        print('Canceling zmq_to_tcp')
+        zmq_to_tcp_task.cancel()
+        await zmq_to_tcp_task
+        print('zmq_to_tcp canceled')
 
 
 class TcpConnectionServer:
@@ -63,8 +70,9 @@ class TcpConnectionServer:
         zmq_user_addr = new_ipc_addr(GUACD_USER_SOCKET_PATH)
         zmq_user_socket.bind(zmq_user_addr)
         await asyncio.wait([
-            create_task(monitor_zmq_socket(zmq_user_monitor)),
-            create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
+            create_task(
+                monitor_zmq_socket(zmq_user_monitor, create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)))
+            ),
             create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
             create_task(guacd_route_connection(self.proc_map, zmq_user_addr, self.zmq_context)),
         ])
