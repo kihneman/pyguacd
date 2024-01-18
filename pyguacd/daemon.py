@@ -47,8 +47,11 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, zmq_to_tcp_
         print('Connection parsing terminated unexpectedly')
 
     # Prevent handle_zmq_to_tcp function from waiting forever to read on a closed socket
-    zmq_to_tcp_task.cancel()
-    await zmq_to_tcp_task
+    if not zmq_to_tcp_task.done():
+        print('Canceling zmq_to_tcp')
+        zmq_to_tcp_task.cancel()
+        await zmq_to_tcp_task
+        print('zmq_to_tcp canceled')
 
 
 async def handle_connection(
