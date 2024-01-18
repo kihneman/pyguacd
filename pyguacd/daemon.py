@@ -86,7 +86,7 @@ class TcpConnectionServer:
     async def handle(cls, tcp_reader: StreamReader, tcp_writer: StreamWriter):
         new_tcp = cls()
 
-        async with new_tcp.connections_left.acquire():
+        async with new_tcp.connections_left:
             print(
                 f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections()}'
             )
