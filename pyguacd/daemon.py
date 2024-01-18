@@ -25,6 +25,7 @@ async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.So
 
 async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter):
     while True:
+        await zmq_socket.poll()
         data = await zmq_socket.recv()
         if len(data) == 0:
             print('zmq to tcp handler closing')
