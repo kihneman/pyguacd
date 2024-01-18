@@ -1,13 +1,17 @@
-from ctypes import cast, c_char_p, c_int, POINTER
-from typing import Optional
+from ctypes import cast, c_char_p, c_int
+
+import zmq
 
 from . import libguac_wrapper
 from .constants import GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
-from .libguac_wrapper import String, guac_parser, guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_socket
+from .libguac_wrapper import (
+    String, guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_socket_create_zmq, guac_socket_free
+)
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 
 
-def parse_identifier(guac_sock: POINTER(guac_socket), zmq_addr: Optional[str] = None):
+def parse_identifier(zmq_addr: str):
+
     parser_ptr = guac_parser_alloc()
     parser = parser_ptr.contents
 
@@ -16,7 +20,11 @@ def parse_identifier(guac_sock: POINTER(guac_socket), zmq_addr: Optional[str] = 
     libguac_wrapper.__guac_error_message()[0] = String(b'').raw
 
     # Get protocol from select instruction
-    if parser_result := guac_parser_expect(parser_ptr, guac_sock, c_int(GUACD_USEC_TIMEOUT), String(b'select')):
+    guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+    parser_result = guac_parser_expect(parser_ptr, guac_sock, c_int(GUACD_USEC_TIMEOUT), String(b'select'))
+    guac_socket_free(guac_sock)
+
+    if parser_result:
         # Log error
         guacd_log_handshake_failure()
         guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, f'Error reading "select" ({parser_result})')

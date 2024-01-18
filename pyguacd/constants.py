@@ -21,7 +21,7 @@ EXIT_FAILURE = 1
 GUACD_LOG_NAME = 'guacd'
 
 # The character prefix which identifies a client ID.
-GUAC_CLIENT_ID_PREFIX = b'$'
+GUAC_CLIENT_ID_PREFIX = '$'
 
 # The default host that guacd should bind to, if no other host is explicitly specified.
 GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
