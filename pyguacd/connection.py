@@ -1,12 +1,49 @@
-from typing import Optional
+from ctypes import cast, c_char_p, c_int
 
-from .constants import GuacClientLogLevel, GUAC_CLIENT_ID_PREFIX
-from .log import guacd_log
-from .parser import parse_identifier
+import zmq
+
+from . import libguac_wrapper
+from .constants import GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT
+from .libguac_wrapper import (
+    String, guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_socket_create_zmq, guac_socket_free
+)
+from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .proc import guacd_create_proc
 
 
-def guacd_route_connection(proc_map: dict, zmq_addr: str, identifier: Optional[str] = None) -> int:
+def parse_identifier(zmq_addr: str):
+
+    parser_ptr = guac_parser_alloc()
+    parser = parser_ptr.contents
+
+    # Reset guac_error
+    libguac_wrapper.__guac_error()[0] = c_int(GuacStatus.GUAC_STATUS_SUCCESS)
+    libguac_wrapper.__guac_error_message()[0] = String(b'').raw
+
+    # Get protocol from select instruction
+    guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+    parser_result = guac_parser_expect(parser_ptr, guac_sock, c_int(GUACD_USEC_TIMEOUT), String(b'select'))
+    guac_socket_free(guac_sock)
+
+    if parser_result:
+        # Log error
+        guacd_log_handshake_failure()
+        guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, f'Error reading "select" ({parser_result})')
+        return None
+
+    # Validate args to select
+    if parser.argc != 1:
+        # Log error
+        guacd_log_handshake_failure()
+        guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Bad number of arguments to "select" ({parser.argc})')
+        return None
+
+    identifier = bytes(cast(parser.argv[0], c_char_p).value).decode()
+    guac_parser_free(parser_ptr)
+    return identifier
+
+
+def guacd_route_connection(proc_map: dict, zmq_addr: str) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -23,15 +60,12 @@ def guacd_route_connection(proc_map: dict, zmq_addr: str, identifier: Optional[s
     @param zmq_addr
         ZeroMQ address for use in creating a new guac_socket to the new connection that will be routed
 
-    @param identifier
-        Protocol or connection id from parsing select instruction
-
     @return
         Zero if the connection was successfully routed, non-zero if routing has
         failed.
     """
-    if identifier is None:
-        identifier = parse_identifier(zmq_addr)
+
+    identifier = parse_identifier(zmq_addr)
 
     if identifier is None:
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Invalid connection identifier from parsing "select"')
