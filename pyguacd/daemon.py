@@ -55,14 +55,15 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, zmq_to_tcp_
 
 
 class TcpConnectionServer:
-    _counter = count(1)
-    open_connections = 0
+    # Class properties for tracking connections
+    _conn_id = count(1)
+    _close_count = count(1)
+    closed_count = 0
     total_connections = 0
     proc_map = dict()
 
     def __init__(self):
-        self.conn_id = self.total_connections = next(self._counter)
-        self.open_connections += 1
+        self.total_connections = self.conn_id = next(self._conn_id)
         self.zmq_context = zmq.asyncio.Context()
 
     async def handle_connection(self, tcp_reader: StreamReader, tcp_writer: StreamWriter):
@@ -77,15 +78,19 @@ class TcpConnectionServer:
             create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
             create_task(guacd_route_connection(self.proc_map, zmq_user_addr, self.zmq_context)),
         ])
+        self.closed_count = next(self._close_count)
         print(
-            f'Finished connection #{self.conn_id}. Current connections running: {self.open_connections}'
+            f'Finished connection #{self.conn_id}. Remaining open connections: {self.open_connections()}'
         )
+
+    def open_connections(self):
+        return self.total_connections - self.closed_count
 
     @classmethod
     async def handle(cls, tcp_reader: StreamReader, tcp_writer: StreamWriter):
         new_tcp = cls()
         print(
-            f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections}'
+            f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections()}'
         )
         await new_tcp.handle_connection(tcp_reader, tcp_writer)
 
