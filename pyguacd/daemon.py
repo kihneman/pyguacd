@@ -25,7 +25,6 @@ async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.So
 
 async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter):
     while True:
-        await zmq_socket.poll()
         data = await zmq_socket.recv()
         if len(data) == 0:
             print('zmq to tcp handler closing')
@@ -55,36 +54,22 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, zmq_to_tcp_
         print('zmq_to_tcp canceled')
 
 
-async def handle_connection(
-        zmq_socket: zmq.asyncio.Socket, zmq_monitor: zmq.asyncio.Socket,
-        tcp_reader: StreamReader, tcp_writer: StreamWriter
-):
-    done, pending = await asyncio.wait([
-    ], return_when=asyncio.FIRST_COMPLETED)
-
-    for task in pending:
-        task.cancel()
-
-
 class TcpConnectionServer:
     _counter = count(1)
-    current_connections = 0
+    open_connections = 0
     total_connections = 0
     proc_map = dict()
 
     def __init__(self):
-        self.current_connection = self.total_connections = next(self._counter)
-        self.current_connections += 1
+        self.conn_id = self.total_connections = next(self._counter)
+        self.open_connections += 1
         self.zmq_context = zmq.asyncio.Context()
 
-    async def handle(self, tcp_reader: StreamReader, tcp_writer: StreamWriter):
+    async def handle_connection(self, tcp_reader: StreamReader, tcp_writer: StreamWriter):
         zmq_user_socket = self.zmq_context.socket(zmq.PAIR)
         zmq_user_monitor = zmq_user_socket.get_monitor_socket()
         zmq_user_addr = new_ipc_addr(GUACD_USER_SOCKET_PATH)
         zmq_user_socket.bind(zmq_user_addr)
-        print(
-            f'Starting connection #{self.current_connection}. Current connections running: {self.current_connections}'
-        )
         await asyncio.wait([
             create_task(
                 monitor_zmq_socket(zmq_user_monitor, create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)))
@@ -93,12 +78,20 @@ class TcpConnectionServer:
             create_task(guacd_route_connection(self.proc_map, zmq_user_addr, self.zmq_context)),
         ])
         print(
-            f'Finished connection #{self.current_connection}. Current connections running: {self.current_connections}'
+            f'Finished connection #{self.conn_id}. Current connections running: {self.open_connections}'
         )
 
     @classmethod
+    async def handle(cls, tcp_reader: StreamReader, tcp_writer: StreamWriter):
+        new_tcp = cls()
+        print(
+            f'Starting connection #{new_tcp.conn_id}. Current connections running: {new_tcp.open_connections}'
+        )
+        await new_tcp.handle_connection(tcp_reader, tcp_writer)
+
+    @classmethod
     async def start(cls):
-        return await asyncio.start_server(cls().handle, '0.0.0.0', 8888)
+        return await asyncio.start_server(cls.handle, '0.0.0.0', 8888)
 
 
 async def run_server():
