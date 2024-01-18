@@ -1,6 +1,8 @@
+import asyncio
 from ctypes import cast, c_char_p, c_int
 
 import zmq
+import zmq.asyncio
 
 from . import libguac_wrapper
 from .constants import GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT
@@ -43,7 +45,7 @@ def parse_identifier(zmq_addr: str):
     return identifier
 
 
-def guacd_route_connection(proc_map: dict, zmq_addr: str) -> int:
+async def guacd_route_connection(proc_map: dict, zmq_user_addr: str, zmq_context: zmq.asyncio.Context) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -57,15 +59,18 @@ def guacd_route_connection(proc_map: dict, zmq_addr: str) -> int:
     @param proc_map
         The map of existing client processes.
 
-    @param zmq_addr
+    @param zmq_user_addr
         ZeroMQ address for use in creating a new guac_socket to the new connection that will be routed
+
+    @param zmq_context
+        For making ZeroMQ client connection to add user
 
     @return
         Zero if the connection was successfully routed, non-zero if routing has
         failed.
     """
 
-    identifier = parse_identifier(zmq_addr)
+    identifier = await asyncio.to_thread(parse_identifier, zmq_user_addr)
 
     if identifier is None:
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Invalid connection identifier from parsing "select"')
@@ -86,7 +91,7 @@ def guacd_route_connection(proc_map: dict, zmq_addr: str) -> int:
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
 
         # Create new process
-        proc = guacd_create_proc(identifier)
+        proc = await asyncio.to_thread(guacd_create_proc, identifier)
         if proc is None:
             return 1
 
@@ -95,9 +100,10 @@ def guacd_route_connection(proc_map: dict, zmq_addr: str) -> int:
         client = client_ptr.contents
         proc_map[str(client.connection_id)] = proc
 
-    proc.connect()
+    # Add user to client process
+    zmq_proc_socket: zmq.asyncio.Socket = proc.connect(zmq_context)
     guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connected to "{proc.zmq_socket_addr}"')
-    proc.send_user_socket_addr(zmq_addr)
-    proc.zmq_socket.close()
+    await zmq_proc_socket.send(zmq_user_addr.encode())
+    zmq_proc_socket.close()
 
     return 0
