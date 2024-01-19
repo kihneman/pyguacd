@@ -16,36 +16,45 @@ from .libguac_wrapper import (
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT,
+    GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH , GUACD_USEC_TIMEOUT,
     GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH
 )
 from .log import guacd_log, guacd_log_guac_error
+from .utils.zmq import new_ipc_addr
 
 
 @dataclass
 class GuacdProc:
     """Analogous to guacd_proc struct in proc.h"""
     client_ptr: POINTER(guac_client)
+    zmq_socket_addr: str = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
 
     def connect_client(self, client_id):
         """Create zmq_socket and connect client for receiving user socket addresses"""
         self.zmq_context = zmq.asyncio.Context()
-        self.zmq_socket = self.zmq_context.socket(zmq.SUB)
-        self.zmq_socket.subscribe(client_id)
-        self.zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
 
-    @staticmethod
-    def connect_user(zmq_context: zmq.asyncio.Context):
+        # self.zmq_socket = self.zmq_context.socket(zmq.SUB)
+        # self.zmq_socket.subscribe(client_id)
+        # self.zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
+
+        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+        self.zmq_socket.bind(self.zmq_socket_addr)
+
+    def connect_user(self, zmq_context: zmq.asyncio.Context):
         """Create zmq_socket and connect user to client process for sending the socket address"""
-        zmq_socket = zmq_context.socket(zmq.PUB)
-        zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
+        # zmq_socket = zmq_context.socket(zmq.PUB)
+        # zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
+
+        zmq_socket = zmq_context.socket(zmq.PAIR)
+        zmq_socket.connect(self.zmq_socket_addr)
         return zmq_socket
 
     async def recv_user_socket_addr(self):
         """Receive new user connection from parent"""
-        client_id, user_socket_addr = await self.zmq_socket.recv_multipart()
+        # client_id, user_socket_addr = await self.zmq_socket.recv_multipart()
+        user_socket_addr = await self.zmq_socket.recv()
         return user_socket_addr.decode()
 
 
