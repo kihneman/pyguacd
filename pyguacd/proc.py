@@ -17,28 +17,49 @@ from .libguac_wrapper import (
 )
 from .constants import (
     GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH , GUACD_USEC_TIMEOUT,
-    GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH
+    GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH, GUACD_USE_PROXY, GUACD_USE_PUB_SUB
 )
 from .log import guacd_log, guacd_log_guac_error
-from .utils.zmq import new_ipc_addr
+from .utils.zmq import new_ipc_addr, zmq_client_proxy
 
 
 @dataclass
 class GuacdProc:
     """Analogous to guacd_proc struct in proc.h"""
     client_ptr: POINTER(guac_client)
-    zmq_socket_addr: str = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
+    zmq_base_addr: Optional[str] = None
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
     lock: Optional[asyncio.Lock] = None  # Prevents simultaneous use of connection when not using pubsub
-    pubsub: bool = False
+    proxy: bool = GUACD_USE_PROXY
+    pubsub: bool = GUACD_USE_PUB_SUB
 
     def __post_init__(self):
+        self.zmq_base_addr = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
         if not self.pubsub:
             self.lock = asyncio.Lock()
 
+    @property
     def connection_id(self):
         return bytes(self.client_ptr.contents.connection_id)
+
+    @property
+    def zmq_client_addr(self):
+        if self.pubsub:
+            return f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}'
+        elif self.proxy:
+            return f'{self.zmq_base_addr}-out'
+        else:
+            return self.zmq_base_addr
+
+    @property
+    def zmq_user_addr(self):
+        if self.pubsub:
+            return f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}'
+        elif self.proxy:
+            return f'{self.zmq_base_addr}-in'
+        else:
+            return self.zmq_base_addr
 
     def connect_client(self, client_id):
         """Create zmq_socket and connect client for receiving user socket addresses"""
@@ -47,21 +68,23 @@ class GuacdProc:
         if self.pubsub:
             self.zmq_socket = self.zmq_context.socket(zmq.SUB)
             self.zmq_socket.subscribe(client_id)
-            self.zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
-
+            self.zmq_socket.connect(self.zmq_client_addr)
         else:
             self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
-            self.zmq_socket.bind(self.zmq_socket_addr)
+            if self.proxy:
+                self.zmq_socket.connect(self.zmq_client_addr)
+            else:
+                self.zmq_socket.bind(self.zmq_client_addr)
 
     def connect_user(self, zmq_context: zmq.asyncio.Context):
         """Create zmq_socket and connect user to client process for sending the socket address"""
         if self.pubsub:
             zmq_socket = zmq_context.socket(zmq.PUB)
-            zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
+            zmq_socket.connect(self.zmq_user_addr)
 
         else:
             zmq_socket = zmq_context.socket(zmq.PAIR)
-            zmq_socket.connect(self.zmq_socket_addr)
+            zmq_socket.connect(self.zmq_user_addr)
 
         return zmq_socket
 
@@ -76,7 +99,7 @@ class GuacdProc:
     async def send_user_socket_addr(self, zmq_context: zmq.asyncio.Context, zmq_user_addr: str):
         if self.pubsub:
             zmq_socket = self.connect_user(zmq_context)
-            await zmq_socket.send_multipart((self.connection_id(), zmq_user_addr.encode()))
+            await zmq_socket.send_multipart((self.connection_id, zmq_user_addr.encode()))
             zmq_socket.close()
         else:
             async with self.lock:
@@ -208,7 +231,11 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: multiproce
     client_socket_ptr = client.socket
     guac_socket_require_keep_alive(client_socket_ptr)
 
-    asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
+    if GUACD_USE_PROXY and not GUACD_USE_PUB_SUB:
+        with zmq_client_proxy(base_path=proc.zmq_base_addr, pub_sub=False):
+            asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
+    else:
+        asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
 
     # Clean up
     cleanup_client(client_ptr)

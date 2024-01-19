@@ -29,16 +29,25 @@ def new_ipc_addr(base_path):
     return f'ipc://{base_path}{uid}'
 
 
-def start_zmq_client_proxy():
+def start_zmq_client_proxy(base_path=None, pub_sub=False):
     """Connects users to existing clients for sending the user socket address"""
 
-    zmq_router_proxy = ThreadProxy(zmq.XSUB, zmq.XPUB)
+    if pub_sub:
+        zmq_router_proxy = ThreadProxy(zmq.XSUB, zmq.XPUB)
+    else:
+        zmq_router_proxy = ThreadProxy(zmq.PAIR, zmq.PAIR)
 
-    # The users connect with PUB sockets to XSUB in port
-    zmq_router_proxy.bind_in(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
+    # Users connect to the in port
+    if base_path is None:
+        zmq_router_proxy.bind_in(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
+    else:
+        zmq_router_proxy.bind_in(f'ipc://{base_path}-in')
 
-    # The clients connect with SUB sockets to XPUB out port
-    zmq_router_proxy.bind_out(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
+    # Clients connect to the out port
+    if base_path is None:
+        zmq_router_proxy.bind_out(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
+    else:
+        zmq_router_proxy.bind_out(f'ipc://{base_path}-out')
 
     zmq_router_proxy.start()
     proxy_context = zmq_router_proxy.context_factory()
@@ -47,8 +56,8 @@ def start_zmq_client_proxy():
 
 
 @contextmanager
-def zmq_client_proxy():
-    zmq_router_proxy, proxy_context = start_zmq_client_proxy()
+def zmq_client_proxy(*args, **kwargs):
+    zmq_router_proxy, proxy_context = start_zmq_client_proxy(*args, **kwargs)
     try:
         yield zmq_router_proxy
     finally:

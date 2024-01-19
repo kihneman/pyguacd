@@ -101,6 +101,7 @@ async def guacd_route_connection(proc_map: dict, zmq_user_addr: str, zmq_context
         client_ptr = proc.client_ptr
         client = client_ptr.contents
         client_id = str(client.connection_id)
+        print(f'******** New process with client id "{client_id}" and socket address "{proc.zmq_socket_addr}" ********')
         proc_map[client_id] = proc
 
     # Add user to client process
