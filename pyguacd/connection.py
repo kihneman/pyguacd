@@ -105,7 +105,6 @@ async def guacd_route_connection(proc_map: dict, zmq_user_addr: str, zmq_context
 
     # Add user to client process
     await asyncio.sleep(.1)
-    await proc.send_user_socket_addr(zmq_user_addr)
-    proc.zmq_socket.close()
+    await proc.send_user_socket_addr(zmq_context, zmq_user_addr)
 
     return 0

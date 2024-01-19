@@ -30,7 +30,12 @@ class GuacdProc:
     zmq_socket_addr: str = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
+    lock: Optional[asyncio.Lock] = None  # Prevents simultaneous use of connection when not using pubsub
     pubsub: bool = False
+
+    def __post_init__(self):
+        if not self.pubsub:
+            self.lock = asyncio.Lock()
 
     def connection_id(self):
         return bytes(self.client_ptr.contents.connection_id)
@@ -68,11 +73,16 @@ class GuacdProc:
             user_socket_addr = await self.zmq_socket.recv()
         return user_socket_addr.decode()
 
-    async def send_user_socket_addr(self, zmq_user_addr):
+    async def send_user_socket_addr(self, zmq_context: zmq.asyncio.Context, zmq_user_addr: str):
         if self.pubsub:
-            await self.zmq_socket.send_multipart((self.connection_id(), zmq_user_addr.encode()))
+            zmq_socket = self.connect_user(zmq_context)
+            await zmq_socket.send_multipart((self.connection_id(), zmq_user_addr.encode()))
+            zmq_socket.close()
         else:
-            await self.zmq_socket.send(zmq_user_addr.encode())
+            async with self.lock:
+                zmq_socket = self.connect_user(zmq_context)
+                await zmq_socket.send(zmq_user_addr.encode())
+                zmq_socket.close()
 
 
 def cleanup_client(client):
