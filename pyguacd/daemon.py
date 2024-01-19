@@ -72,8 +72,8 @@ class TcpConnectionServer:
         zmq_user_socket.bind(zmq_user_addr)
 
         connection_tasks = [
-            create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
-            create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
+            create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer), name=f'Conn{self.conn_id}.zmq_read'),
+            create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket), name=f'Conn{self.conn_id}.tcp_read'),
         ]
         await asyncio.wait([
             create_task(monitor_zmq_socket(zmq_user_monitor, connection_tasks)),
