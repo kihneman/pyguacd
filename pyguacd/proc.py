@@ -9,18 +9,17 @@ from typing import Dict, Optional
 import zmq
 import zmq.asyncio
 
-from . import libguac_wrapper, log
+from . import libguac_wrapper
 from .libguac_wrapper import (
-    String, guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
-    guac_socket, guac_socket_create_zmq, guac_socket_require_keep_alive,
+    guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
+    guac_socket_create_zmq, guac_socket_require_keep_alive,
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USEC_TIMEOUT,
+    GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT,
     GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH
 )
 from .log import guacd_log, guacd_log_guac_error
-from .utils.zmq import new_ipc_addr
 
 
 @dataclass
@@ -35,13 +34,13 @@ class GuacdProc:
         self.zmq_context = zmq.asyncio.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.SUB)
         self.zmq_socket.subscribe(client_id)
-        self.zmq_socket.connect(GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH)
+        self.zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH}')
 
     @staticmethod
     def connect_user(zmq_context: zmq.asyncio.Context):
         """Create zmq_socket and connect user to client process for sending the socket address"""
-        zmq_socket = zmq_context.socket(zmq.PAIR)
-        zmq_socket.connect(GUACD_ZMQ_PROXY_USER_SOCKET_PATH)
+        zmq_socket = zmq_context.socket(zmq.PUB)
+        zmq_socket.connect(f'ipc://{GUACD_ZMQ_PROXY_USER_SOCKET_PATH}')
         return zmq_socket
 
     async def recv_user_socket_addr(self):
@@ -113,7 +112,7 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     # The first file descriptor is the owner
     owner = 1
 
-    proc.connect_client(client.connection_id)
+    proc.connect_client(str(client.connection_id))
     proc_ready_event.set()
 
     while True:
