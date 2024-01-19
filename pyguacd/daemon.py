@@ -8,7 +8,7 @@ import zmq.asyncio
 
 from .connection import guacd_route_connection
 from .constants import GUACD_USER_SOCKET_PATH
-from .utils.zmq import new_ipc_addr, check_zmq_monitor_events
+from .utils.zmq import check_zmq_monitor_events, new_ipc_addr, zmq_client_proxy
 
 
 CONNECTION_LIMIT = 2 ** 20
@@ -103,16 +103,18 @@ class TcpConnectionServer:
 
 
 async def run_server():
-    server = await TcpConnectionServer.start()
+    # Setup ZeroMQ proxy for sending user sockets to clients first
+    with zmq_client_proxy():
+        server = await TcpConnectionServer.start()
 
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-    print(f'Serving on {addrs}')
+        addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+        print(f'Serving on {addrs}')
 
-    async with server:
-        try:
-            await server.serve_forever()
-        except asyncio.exceptions.CancelledError:
-            print('Server closed')
+        async with server:
+            try:
+                await server.serve_forever()
+            except asyncio.exceptions.CancelledError:
+                print('Server closed')
 
 
 if __name__ == '__main__':
