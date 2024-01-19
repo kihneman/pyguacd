@@ -136,11 +136,16 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
             continue
 
         # Launch user thread
-        guacd_user_thread_coro = asyncio.to_thread(guacd_user_thread, client_ptr, owner, user_socket_addr)
+        guacd_user_thread_coro = asyncio.to_thread(
+            guacd_user_thread, client_ptr, owner, user_socket_addr, guacd_proc_stop_event
+        )
         guacd_user_thread_tasks[user_socket_addr] = asyncio.create_task(guacd_user_thread_coro, name=user_socket_addr)
 
         # Future file descriptors are not owners
         owner = 0
+        break
+
+    await guacd_proc_stop_task
 
 
 def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: multiprocessing.Event):
