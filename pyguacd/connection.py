@@ -78,13 +78,15 @@ async def guacd_route_connection(proc_map: dict, zmq_user_addr: str, zmq_context
 
     # If connection ID, retrieve existing process
     if identifier[0] == GUAC_CLIENT_ID_PREFIX:
-        proc = proc_map.get(identifier)
+        client_id = identifier
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Checking for existing connection')
+        proc = proc_map.get(client_id)
 
         if proc is None:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{identifier}" does not exist')
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{client_id}" does not exist')
             return 1
-        else:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Found existing connection "{identifier}"')
+
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Found existing connection "{client_id}"')
 
     # Otherwise, create new client
     else:
@@ -98,12 +100,12 @@ async def guacd_route_connection(proc_map: dict, zmq_user_addr: str, zmq_context
         # Add to proc_map
         client_ptr = proc.client_ptr
         client = client_ptr.contents
-        proc_map[str(client.connection_id)] = proc
+        client_id = str(client.connection_id)
+        proc_map[client_id] = proc
 
     # Add user to client process
     zmq_proc_socket: zmq.asyncio.Socket = proc.connect(zmq_context)
-    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connected to "{proc.zmq_socket_addr}"')
-    await zmq_proc_socket.send(zmq_user_addr.encode())
+    await zmq_proc_socket.send_multipart((client_id.encode(), zmq_user_addr.encode()))
     zmq_proc_socket.close()
 
     return 0
