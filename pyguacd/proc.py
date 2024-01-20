@@ -138,7 +138,7 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     # The first file descriptor is the owner
     owner = 1
 
-    proc.connect_client()
+    proc.connect_client(monitor=True)
     monitor_task = asyncio.create_task(proc.monitor_socket())
     proc_ready_event.set()
 
