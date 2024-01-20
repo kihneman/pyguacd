@@ -20,7 +20,7 @@ from .constants import (
     GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH, GUACD_USE_PROXY, GUACD_USE_PUB_SUB
 )
 from .log import guacd_log, guacd_log_guac_error
-from .utils.zmq import new_ipc_addr, zmq_client_proxy
+from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
 
 
 @dataclass
@@ -36,7 +36,7 @@ class GuacdProc:
         self.zmq_socket_addr = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
         self.lock = asyncio.Lock()
 
-    def connect_client(self, client_id):
+    def connect_client(self):
         """Create zmq_socket and connect client for receiving user socket addresses"""
         self.zmq_context = zmq.asyncio.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
@@ -46,6 +46,21 @@ class GuacdProc:
         """Create zmq_socket and connect user to client process for sending the socket address"""
         self.zmq_socket = zmq_context.socket(zmq.PAIR)
         self.zmq_socket.connect(self.zmq_socket_addr)
+
+    async def monitor_socket(self):
+        zmq_monitor_socket = self.zmq_socket.get_monitor_socket()
+        zmq_events = [zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
+        if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events[:2]):
+            print('**** Client socket accepted router connection')
+
+            if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events[-1:]):
+                print('**** Router disconnected from client')
+            else:
+                print('**** Unexpected connection activity from router to client')
+        else:
+            print('**** Client socket unable to accept router connection')
+
+        zmq_monitor_socket.close()
 
     async def recv_user_socket_addr(self):
         """Receive new user connection from parent"""
@@ -123,7 +138,8 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     # The first file descriptor is the owner
     owner = 1
 
-    proc.connect_client(str(client.connection_id))
+    proc.connect_client()
+    monitor_task = asyncio.create_task(proc.monitor_socket())
     proc_ready_event.set()
 
     while True:
