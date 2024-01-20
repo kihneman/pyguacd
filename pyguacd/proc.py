@@ -30,16 +30,21 @@ class GuacdProc:
     zmq_socket_addr: Optional[str] = None
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
+    zmq_monitor_socket: Optional[zmq.asyncio.Socket] = None
     lock: Optional[asyncio.Lock] = None  # Prevents simultaneous use of connection when not using pubsub
 
     def __post_init__(self):
         self.zmq_socket_addr = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
         self.lock = asyncio.Lock()
 
-    def connect_client(self):
+    def connect_client(self, monitor=True):
         """Create zmq_socket and connect client for receiving user socket addresses"""
         self.zmq_context = zmq.asyncio.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+
+        if monitor:
+            self.zmq_monitor_socket = self.zmq_socket.get_monitor_socket()
+
         self.zmq_socket.bind(self.zmq_socket_addr)
 
     def connect_user(self, zmq_context: zmq.asyncio.Context):
@@ -48,19 +53,14 @@ class GuacdProc:
         self.zmq_socket.connect(self.zmq_socket_addr)
 
     async def monitor_socket(self):
-        zmq_monitor_socket = self.zmq_socket.get_monitor_socket()
-        zmq_events = [zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
-        if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events[:2]):
-            print('**** Client socket accepted router connection')
-
-            if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events[-1:]):
-                print('**** Router disconnected from client')
-            else:
-                print('**** Unexpected connection activity from router to client')
-        else:
-            print('**** Client socket unable to accept router connection')
-
-        zmq_monitor_socket.close()
+        zmq_events = [zmq.Event.LISTENING, zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
+        event_msgs = [
+            f'**** Listening on client socket "{self.zmq_socket_addr}"', None,
+            f'**** Client socket "{self.zmq_socket_addr}" accepted router connection',
+            f'**** Client socket "{self.zmq_socket_addr}" closed',
+        ]
+        await check_zmq_monitor_events(self.zmq_monitor_socket, zmq_events, event_msgs)
+        self.zmq_monitor_socket.close()
 
     async def recv_user_socket_addr(self):
         """Receive new user connection from parent"""
