@@ -120,10 +120,4 @@ async def run_server():
 
 
 if __name__ == '__main__':
-    if GUACD_USE_PROXY and GUACD_USE_PUB_SUB:
-        # Setup ZeroMQ proxy for sending user sockets to clients first
-        # ZeroMQ pair proxy is created for each new client
-        with zmq_client_proxy(pub_sub=True):
-            asyncio.run(run_server())
-    else:
-        asyncio.run(run_server())
+    asyncio.run(run_server())
