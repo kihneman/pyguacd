@@ -79,14 +79,12 @@ class GuacdProc:
     def connect_user(self, zmq_context: zmq.asyncio.Context):
         """Create zmq_socket and connect user to client process for sending the socket address"""
         if self.pubsub:
-            zmq_socket = zmq_context.socket(zmq.PUB)
-            zmq_socket.connect(self.zmq_user_addr)
+            self.zmq_socket = zmq_context.socket(zmq.PUB)
+            self.zmq_socket.connect(self.zmq_user_addr)
 
         else:
-            zmq_socket = zmq_context.socket(zmq.PAIR)
-            zmq_socket.connect(self.zmq_user_addr)
-
-        return zmq_socket
+            self.zmq_socket = zmq_context.socket(zmq.PAIR)
+            self.zmq_socket.connect(self.zmq_user_addr)
 
     async def recv_user_socket_addr(self):
         """Receive new user connection from parent"""
@@ -96,27 +94,26 @@ class GuacdProc:
             user_socket_addr = await self.zmq_socket.recv()
         return user_socket_addr.decode()
 
-    async def send_user_socket_addr(self, zmq_context: zmq.asyncio.Context, zmq_user_addr: str):
+    async def send_user_socket_addr(self, zmq_user_addr: str):
         if self.pubsub:
-            zmq_socket = self.connect_user(zmq_context)
-            await zmq_socket.send_multipart((self.connection_id, zmq_user_addr.encode()))
-            zmq_socket.close()
+            await self.zmq_socket.send_multipart((self.connection_id, zmq_user_addr.encode()))
         else:
             async with self.lock:
-                zmq_socket = self.connect_user(zmq_context)
-                await zmq_socket.send(zmq_user_addr.encode())
-                zmq_socket.close()
+                await self.zmq_socket.send(zmq_user_addr.encode())
+
+    def close(self):
+        self.zmq_socket.close()
 
 
-def cleanup_client(client):
+def cleanup_client(client_ptr):
     # Request client to stop/disconnect
-    guac_client_stop(client)
+    guac_client_stop(client_ptr)
 
     # Attempt to free client cleanly
     guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, 'Requesting termination of client...')
 
     # Attempt to free client (this may never return if the client is malfunctioning)
-    guac_client_free(client)
+    guac_client_free(client_ptr)
     guacd_log(GuacClientLogLevel.GUAC_LOG_DEBUG, 'Client terminated successfully.')
 
     # TODO: Forcibly terminate if timeout occurs during client free
@@ -232,12 +229,13 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: multiproce
     guac_socket_require_keep_alive(client_socket_ptr)
 
     if GUACD_USE_PROXY and not GUACD_USE_PUB_SUB:
-        with zmq_client_proxy(base_path=proc.zmq_base_addr, pub_sub=False):
+        with zmq_client_proxy(base_addr=proc.zmq_base_addr, pub_sub=False):
             asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
     else:
         asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
 
     # Clean up
+    proc.close()
     cleanup_client(client_ptr)
 
 

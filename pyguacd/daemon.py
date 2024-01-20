@@ -1,13 +1,14 @@
 import asyncio
 from asyncio import create_task, Semaphore, StreamReader, StreamWriter, Task
 from itertools import count
-from typing import Iterable
+from typing import Dict, Iterable
 
 import zmq
 import zmq.asyncio
 
 from .connection import guacd_route_connection
 from .constants import GUACD_USER_SOCKET_PATH, GUACD_USE_PROXY, GUACD_USE_PUB_SUB
+from .proc import GuacdProc
 from .utils.zmq import check_zmq_monitor_events, new_ipc_addr, zmq_client_proxy
 
 
@@ -46,6 +47,9 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_
     else:
         print('Connection parsing terminated unexpectedly')
 
+    # Clean up
+    zmq_monitor_socket.close()
+
     # Prevent connection handles from waiting forever to read on a closed socket
     for conn_task in connection_tasks:
         if not conn_task.done():
@@ -59,7 +63,7 @@ class TcpConnectionServer:
     _conn_id = count(1)
     connections_left = Semaphore(CONNECTION_LIMIT)
     total_connections = 0
-    proc_map = dict()
+    proc_map: Dict[str, GuacdProc] = dict()
 
     def __init__(self):
         self.total_connections = self.conn_id = next(self._conn_id)
