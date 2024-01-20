@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Iterable
+from typing import Iterable, Optional
 from uuid import uuid4
 
 import zmq
@@ -10,17 +10,31 @@ from zmq.utils.monitor import parse_monitor_message
 from ..constants import GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH
 
 
-async def check_zmq_monitor_events(zmq_monitor: zmq.asyncio.Socket, zmq_events: Iterable[zmq.Event]):
-    for expect_event in zmq_events:
-        await zmq_monitor.poll()
-        mon_msg = parse_monitor_message(await zmq_monitor.recv_multipart())
-        event = mon_msg.get('event')
-        if event != expect_event:
-            event_name = event.name if isinstance(event, zmq.Event) else event
-            print(f'Expected "{expect_event.name}" but got "{event_name}"')
-            print('ZMQ connection error')
-            return False
+async def process_monitor_event(zmq_monitor: zmq.asyncio.Socket, expect_event: zmq.Event, msg: Optional[str] = None):
+    mon_msg = parse_monitor_message(await zmq_monitor.recv_multipart())
+    event = mon_msg.get('event')
+    if event == expect_event:
+        if msg is not None:
+            print(msg)
+        return True
+    else:
+        event_name = event.name if isinstance(event, zmq.Event) else event
+        print(f'Expected "{expect_event.name}" but got "{event_name}"')
+        print('ZMQ connection error')
+        return False
 
+
+async def check_zmq_monitor_events(
+        zmq_monitor: zmq.asyncio.Socket, zmq_events: Iterable[zmq.Event], messages: Optional[Iterable[str]] = None
+):
+    if messages is None:
+        for expect_event in zmq_events:
+            if not await process_monitor_event(zmq_monitor, expect_event):
+                return False
+    else:
+        for expect_event, msg in zip(zmq_events, messages):
+            if not await process_monitor_event(zmq_monitor, expect_event, msg):
+                return False
     return True
 
 
