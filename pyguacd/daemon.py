@@ -113,7 +113,6 @@ async def run_server():
         import signal
         loop = server.get_loop()
         loop.add_signal_handler(signal.SIGINT, server.close)
-        loop.add_signal_handler(signal.SIGKILL, server.close)
         loop.add_signal_handler(signal.SIGTERM, server.close)
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
