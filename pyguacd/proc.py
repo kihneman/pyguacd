@@ -1,6 +1,7 @@
 import asyncio
 import multiprocessing
 import threading
+from asyncio.exceptions import CancelledError
 from ctypes import c_int, POINTER
 from dataclasses import dataclass
 from multiprocessing import Process
@@ -64,8 +65,13 @@ class GuacdProc:
 
     async def recv_user_socket_addr(self):
         """Receive new user connection from parent"""
-        user_socket_addr = await self.zmq_socket.recv()
-        return user_socket_addr.decode()
+        try:
+            user_socket_addr = await self.zmq_socket.recv()
+        except CancelledError:
+            print('Socket canceled')
+            return None
+        else:
+            return user_socket_addr.decode()
 
     async def send_user_socket_addr(self, zmq_user_addr: str):
         async with self.lock:
@@ -138,7 +144,7 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     # The first file descriptor is the owner
     owner = 1
 
-    proc.connect_client(monitor=True)
+    proc.connect_client()
     monitor_task = asyncio.create_task(proc.monitor_socket())
     proc_ready_event.set()
 
