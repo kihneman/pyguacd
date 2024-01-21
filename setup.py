@@ -1,17 +1,17 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='guacd',
+    name='pyguacd',
     version='0.9.0',
     description='Keeper Guacamole Server Python SDK',
-    long_description='Python launcher for Keeper Guacamole Server',
+    long_description='Python SDK for Keeper Guacamole Server',
     author='Keeper Security',
     author_email='ops@keepersecurity.com',
-    packages=find_packages(exclude=['cython']),
+    packages=find_packages(),
     install_requires=[],
     entry_points={
         'console_scripts': [
-            'guacd=guacd.daemon:main'
+            'pyguacd=pyguacd.daemon:main'
         ]
     }
 )
