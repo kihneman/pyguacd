@@ -24,6 +24,9 @@ from .log import guacd_log, guacd_log_guac_error
 from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
 
 
+MONITOR_ZMQ_CLIENT_SOCKET = False
+
+
 @dataclass
 class GuacdProc:
     """Analogous to guacd_proc struct in proc.h"""
@@ -143,8 +146,9 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     # The first file descriptor is the owner
     owner = 1
 
-    proc.connect_client()
-    monitor_task = asyncio.create_task(proc.monitor_socket())
+    proc.connect_client(monitor=MONITOR_ZMQ_CLIENT_SOCKET)
+    if MONITOR_ZMQ_CLIENT_SOCKET:
+        monitor_task = asyncio.create_task(proc.monitor_socket())
     proc_ready_event.set()
 
     while True:
