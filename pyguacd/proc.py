@@ -68,7 +68,6 @@ class GuacdProc:
         try:
             user_socket_addr = await self.zmq_socket.recv()
         except CancelledError:
-            print('Socket canceled')
             return None
         else:
             return user_socket_addr.decode()
@@ -151,21 +150,22 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     while True:
         # Wait for either a new user socket or threading event "guacd_proc_stop_event"
         recv_user_socket_task = asyncio.create_task(proc.recv_user_socket_addr())
-        recv_user_socket_tasks = [recv_user_socket_task, guacd_proc_stop_task]
-        await asyncio.wait(recv_user_socket_tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            [recv_user_socket_task, guacd_proc_stop_task], return_when=asyncio.FIRST_COMPLETED
+        )
 
-        if guacd_proc_stop_event.set():
+        if recv_user_socket_task in pending:
             # Gracefully exit process
-            if not recv_user_socket_task.done():
-                recv_user_socket_task.cancel()
-                await recv_user_socket_task
-                break
+            recv_user_socket_task.cancel()
+            await recv_user_socket_task
+            break
 
         user_socket_addr = recv_user_socket_task.result()
-        if len(user_socket_addr) > 0:
+        if user_socket_addr:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Received user_socket_addr "{user_socket_addr}"')
         else:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Invalid user connection to client')
+            msg = 'Client ZeroMQ socket was canceled' if user_socket_addr is None else 'Empty user socket address'
+            guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, msg)
             continue
 
         # Launch user thread
