@@ -125,5 +125,9 @@ async def run_server():
             print('Server closed')
 
 
-if __name__ == '__main__':
+def main():
     asyncio.run(run_server())
+
+
+if __name__ == '__main__':
+    main()

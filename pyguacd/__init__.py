@@ -1,7 +1,5 @@
-import asyncio
-
-from .daemon import run_server
+from .daemon import main
 
 
 if __name__ == '__main__':
-    asyncio.run(run_server())
+    main()
