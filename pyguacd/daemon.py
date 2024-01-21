@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from asyncio import create_task, Semaphore, StreamReader, StreamWriter, Task
 from itertools import count
 from typing import Dict, Iterable
@@ -7,9 +8,9 @@ import zmq
 import zmq.asyncio
 
 from .connection import guacd_route_connection
-from .constants import GUACD_USER_SOCKET_PATH, GUACD_USE_PROXY, GUACD_USE_PUB_SUB
+from .constants import GUACD_USER_SOCKET_PATH
 from .proc import GuacdProc
-from .utils.zmq import check_zmq_monitor_events, new_ipc_addr, zmq_client_proxy
+from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
 
 
 CONNECTION_LIMIT = 2 ** 20
@@ -108,6 +109,12 @@ class TcpConnectionServer:
 
 async def run_server():
     server = await TcpConnectionServer.start()
+    if not sys.platform.startswith('win'):
+        import signal
+        loop = server.get_loop()
+        loop.add_signal_handler(signal.SIGINT, server.close)
+        loop.add_signal_handler(signal.SIGKILL, server.close)
+        loop.add_signal_handler(signal.SIGTERM, server.close)
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
     print(f'Serving on {addrs}')

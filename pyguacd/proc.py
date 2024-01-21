@@ -17,14 +17,10 @@ from .libguac_wrapper import (
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH , GUACD_USEC_TIMEOUT,
-    GUACD_ZMQ_PROXY_CLIENT_SOCKET_PATH, GUACD_ZMQ_PROXY_USER_SOCKET_PATH, GUACD_USE_PROXY, GUACD_USE_PUB_SUB
+    GuacClientLogLevel, GuacStatus, GUACD_PROCESS_SOCKET_PATH, GUACD_USEC_TIMEOUT, MONITOR_ZMQ_CLIENT_SOCKET
 )
 from .log import guacd_log, guacd_log_guac_error
 from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
-
-
-MONITOR_ZMQ_CLIENT_SOCKET = False
 
 
 @dataclass
@@ -131,9 +127,7 @@ def guacd_user_thread(client_ptr, owner, user_socket_addr, guacd_proc_stop_event
 
 
 async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocessing.Event):
-
     client_ptr = proc.client_ptr
-    client = client_ptr.contents
 
     # Store asyncio tasks of user threads by the user socket addr
     guacd_user_thread_tasks: Dict[str, asyncio.Task] = dict()

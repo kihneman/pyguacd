@@ -42,8 +42,7 @@ GUACD_USER_SOCKET_FILENAME = 'user-'
 GUACD_USER_SOCKET_PATH = join(GUACD_SOCKET_DIR, GUACD_USER_SOCKET_FILENAME)
 
 # Other Zmq settings
-GUACD_USE_PROXY = False
-GUACD_USE_PUB_SUB = False
+MONITOR_ZMQ_CLIENT_SOCKET = False
 
 # The number of milliseconds to wait for messages in any phase before
 # timing out and closing the connection with an error.
