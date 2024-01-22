@@ -107,8 +107,12 @@ async def run_server():
         loop.add_signal_handler(signal.SIGINT, server.close)
         loop.add_signal_handler(signal.SIGTERM, server.close)
 
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-    print(f'Serving on {addrs}')
+    if len(server.sockets) == 1:
+        host, port = server.sockets[0].getsockname()
+        print(f'Listening on host {host}, port {port}')
+    else:
+        addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+        print(f'Serving on {addrs}')
 
     async with server:
         try:
