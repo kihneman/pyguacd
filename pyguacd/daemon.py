@@ -8,7 +8,7 @@ import zmq
 import zmq.asyncio
 
 from .connection import guacd_route_connection
-from .constants import GUACD_USER_SOCKET_PATH
+from .constants import GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT, GUACD_USER_SOCKET_PATH
 from .proc import GuacdProc
 from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
 
@@ -97,7 +97,7 @@ class TcpConnectionServer:
 
     @classmethod
     async def start(cls):
-        return await asyncio.start_server(cls.handle, '0.0.0.0', 8888)
+        return await asyncio.start_server(cls.handle, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT)
 
 
 async def run_server():
