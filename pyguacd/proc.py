@@ -120,7 +120,6 @@ def guacd_user_thread(client_ptr, owner, user_socket_addr, guacd_proc_stop_event
     user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
     user.client = client_ptr
     user.owner = owner
-    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Created user id "{user.user_id}"')
 
     # Handle user connection from handshake until disconnect/completion
     guac_user_handle_connection(user_ptr, c_int(GUACD_USEC_TIMEOUT))
@@ -162,18 +161,18 @@ async def guacd_proc_serve_users(proc: GuacdProc):
             [recv_user_socket_task, guacd_proc_stop_task], return_when=asyncio.FIRST_COMPLETED
         )
 
-        if recv_user_socket_task in pending:
+        if guacd_proc_stop_task in done:
             # Gracefully exit process
             recv_user_socket_task.cancel()
             await recv_user_socket_task
             break
 
         user_socket_addr = recv_user_socket_task.result()
-        if user_socket_addr:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Received user_socket_addr "{user_socket_addr}"')
-        else:
-            msg = 'Client ZeroMQ socket was canceled' if user_socket_addr is None else 'Empty user socket address'
-            guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, msg)
+        if not user_socket_addr:
+            guacd_log(
+                GuacClientLogLevel.GUAC_LOG_ERROR,
+                'Client ZMQ socket was canceled' if user_socket_addr is None else 'Invalid (empty) user socket address'
+            )
             continue
 
         # Launch user thread
@@ -203,9 +202,6 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str):
             guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, 'Unable to load client plugin')
 
         cleanup_client(client_ptr)
-    else:
-        # Extra debug
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Loaded plugin for connection id "{client.connection_id}"')
 
     # Enable keep alive on the broadcast socket
     client_socket_ptr = client.socket
