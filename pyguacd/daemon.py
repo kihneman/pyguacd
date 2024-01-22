@@ -36,17 +36,11 @@ async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWr
         await tcp_writer.drain()
 
 
-async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_tasks: Iterable[Task]):
+async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_tasks: Iterable[Task], conn_id):
     zmq_events = [zmq.Event.LISTENING, zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
     if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events):
-        print('Parsed connection identifier')
-
         if await check_zmq_monitor_events(zmq_monitor_socket, zmq_events[1:]):
-            print('User disconnected')
-        else:
-            print('Connection terminated unexpectedly')
-    else:
-        print('Connection parsing terminated unexpectedly')
+            print(f'User connection #{conn_id} disconnected')
 
     # Clean up
     zmq_monitor_socket.close()
@@ -54,7 +48,6 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_
     # Prevent connection handles from waiting forever to read on a closed socket
     for conn_task in connection_tasks:
         if not conn_task.done():
-            print(f'Canceling "{conn_task.get_name()}"')
             conn_task.cancel()
             await conn_task
 

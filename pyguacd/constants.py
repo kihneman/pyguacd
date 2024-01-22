@@ -53,6 +53,9 @@ GUACD_TIMEOUT = 15000
 # equal to GUACD_TIMEOUT * 1000.
 GUACD_USEC_TIMEOUT = (GUACD_TIMEOUT*1000)
 
+# The operation could not be performed as the requested resource does not exist.
+GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND = 0x0204
+
 # Error strings
 GUAC_STATUS_SUCCESS_STR           = "Success"
 GUAC_STATUS_NO_MEMORY_STR         = "Insufficient memory"

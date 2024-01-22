@@ -27,15 +27,25 @@ from .utils.zmq import check_zmq_monitor_events, new_ipc_addr
 class GuacdProc:
     """Analogous to guacd_proc struct in proc.h"""
     client_ptr: POINTER(guac_client)
+
+    # Prevents simultaneous use of connection when not using pubsub
+    lock: Optional[asyncio.Lock] = None
+
+    process: Optional[Process] = None
+    ready_event: Optional[multiprocessing.Event] = None
+
+    # Final asyncio task to clean up after process
+    task: Optional[asyncio.Task] = None
+
     zmq_socket_addr: Optional[str] = None
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
     zmq_monitor_socket: Optional[zmq.asyncio.Socket] = None
-    lock: Optional[asyncio.Lock] = None  # Prevents simultaneous use of connection when not using pubsub
 
     def __post_init__(self):
-        self.zmq_socket_addr = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
         self.lock = asyncio.Lock()
+        self.ready_event = multiprocessing.Event()
+        self.zmq_socket_addr = new_ipc_addr(GUACD_PROCESS_SOCKET_PATH)
 
     def connect_client(self, monitor=True):
         """Create zmq_socket and connect client for receiving user socket addresses"""
@@ -126,7 +136,7 @@ def guacd_user_thread(client_ptr, owner, user_socket_addr, guacd_proc_stop_event
         guacd_proc_stop_event.set()
 
 
-async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocessing.Event):
+async def guacd_proc_serve_users(proc: GuacdProc):
     client_ptr = proc.client_ptr
 
     # Store asyncio tasks of user threads by the user socket addr
@@ -143,7 +153,7 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
     proc.connect_client(monitor=MONITOR_ZMQ_CLIENT_SOCKET)
     if MONITOR_ZMQ_CLIENT_SOCKET:
         monitor_task = asyncio.create_task(proc.monitor_socket())
-    proc_ready_event.set()
+    proc.ready_event.set()
 
     while True:
         # Wait for either a new user socket or threading event "guacd_proc_stop_event"
@@ -176,7 +186,7 @@ async def guacd_proc_serve_users(proc: GuacdProc, proc_ready_event: multiprocess
         owner = 0
 
 
-def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: multiprocessing.Event):
+def guacd_exec_proc(proc: GuacdProc, protocol: str):
 
     client_ptr = proc.client_ptr
     client = client_ptr.contents
@@ -201,7 +211,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str, proc_ready_event: multiproce
     client_socket_ptr = client.socket
     guac_socket_require_keep_alive(client_socket_ptr)
 
-    asyncio.run(guacd_proc_serve_users(proc, proc_ready_event))
+    asyncio.run(guacd_proc_serve_users(proc))
 
     # Clean up
     proc.close()
@@ -216,17 +226,14 @@ def guacd_create_proc(protocol: str):
     # Init logging
     # client.log_handler = pointer(ctypes_wrapper.guac_client_log_handler(log.guacd_client_log))
 
-    proc_ready_event = multiprocessing.Event()
-    proc.process = Process(target=guacd_exec_proc, args=(proc, protocol, proc_ready_event))
+    proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
     proc.process.start()
 
     # Wait for process to be ready
-    proc_ready_event.wait(2)
-    if proc_ready_event.is_set():
-        print('Client process started')
+    proc.ready_event.wait(2)
+    if proc.ready_event.is_set():
         return proc
     else:
-        print('ERROR: Client process failed to start')
         proc.process.kill()
         proc.process.close()
         return None
