@@ -95,7 +95,6 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], zmq_addr: str, 
     identifier = await asyncio.to_thread(parse_identifier, zmq_addr, tuple(proc_map.keys()))
 
     if identifier is None:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Invalid connection identifier from parsing "select"')
         return 1
 
     # If connection ID, retrieve existing process
