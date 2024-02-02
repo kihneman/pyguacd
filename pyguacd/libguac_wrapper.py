@@ -7,7 +7,6 @@ ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . \
     src/libguac/guacamole/client.h \
     src/libguac/guacamole/error.h \
     src/libguac/guacamole/error-types.h \
-    src/libguac/guacamole/mem.h \
     src/libguac/guacamole/parser.h \
     src/libguac/guacamole/protocol.h \
     src/libguac/guacamole/socket.h \
@@ -1792,76 +1791,6 @@ if _libs["libguac"].has("__guac_error_message", "cdecl"):
     __guac_error_message = _libs["libguac"].get("__guac_error_message", "cdecl")
     __guac_error_message.argtypes = []
     __guac_error_message.restype = POINTER(POINTER(c_char))
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 64
-if _libs["libguac"].has("PRIV_guac_mem_alloc", "cdecl"):
-    PRIV_guac_mem_alloc = _libs["libguac"].get("PRIV_guac_mem_alloc", "cdecl")
-    PRIV_guac_mem_alloc.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_alloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_alloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 94
-if _libs["libguac"].has("PRIV_guac_mem_zalloc", "cdecl"):
-    PRIV_guac_mem_zalloc = _libs["libguac"].get("PRIV_guac_mem_zalloc", "cdecl")
-    PRIV_guac_mem_zalloc.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_zalloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_zalloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 119
-if _libs["libguac"].has("PRIV_guac_mem_ckd_mul", "cdecl"):
-    PRIV_guac_mem_ckd_mul = _libs["libguac"].get("PRIV_guac_mem_ckd_mul", "cdecl")
-    PRIV_guac_mem_ckd_mul.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_mul.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 144
-if _libs["libguac"].has("PRIV_guac_mem_ckd_add", "cdecl"):
-    PRIV_guac_mem_ckd_add = _libs["libguac"].get("PRIV_guac_mem_ckd_add", "cdecl")
-    PRIV_guac_mem_ckd_add.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_add.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 170
-if _libs["libguac"].has("PRIV_guac_mem_ckd_sub", "cdecl"):
-    PRIV_guac_mem_ckd_sub = _libs["libguac"].get("PRIV_guac_mem_ckd_sub", "cdecl")
-    PRIV_guac_mem_ckd_sub.argtypes = [POINTER(c_size_t), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_sub.restype = c_int
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 190
-if _libs["libguac"].has("PRIV_guac_mem_ckd_mul_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_mul_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_mul_or_die", "cdecl")
-    PRIV_guac_mem_ckd_mul_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_mul_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 209
-if _libs["libguac"].has("PRIV_guac_mem_ckd_add_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_add_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_add_or_die", "cdecl")
-    PRIV_guac_mem_ckd_add_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_add_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 229
-if _libs["libguac"].has("PRIV_guac_mem_ckd_sub_or_die", "cdecl"):
-    PRIV_guac_mem_ckd_sub_or_die = _libs["libguac"].get("PRIV_guac_mem_ckd_sub_or_die", "cdecl")
-    PRIV_guac_mem_ckd_sub_or_die.argtypes = [c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_ckd_sub_or_die.restype = c_size_t
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 266
-if _libs["libguac"].has("PRIV_guac_mem_realloc", "cdecl"):
-    PRIV_guac_mem_realloc = _libs["libguac"].get("PRIV_guac_mem_realloc", "cdecl")
-    PRIV_guac_mem_realloc.argtypes = [POINTER(None), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_realloc.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_realloc.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 303
-if _libs["libguac"].has("PRIV_guac_mem_realloc_or_die", "cdecl"):
-    PRIV_guac_mem_realloc_or_die = _libs["libguac"].get("PRIV_guac_mem_realloc_or_die", "cdecl")
-    PRIV_guac_mem_realloc_or_die.argtypes = [POINTER(None), c_size_t, POINTER(c_size_t)]
-    PRIV_guac_mem_realloc_or_die.restype = POINTER(c_ubyte)
-    PRIV_guac_mem_realloc_or_die.errcheck = lambda v,*a : cast(v, c_void_p)
-
-# /tmp/guacamole-server/src/libguac/guacamole/private/mem.h: 314
-if _libs["libguac"].has("PRIV_guac_mem_free", "cdecl"):
-    PRIV_guac_mem_free = _libs["libguac"].get("PRIV_guac_mem_free", "cdecl")
-    PRIV_guac_mem_free.argtypes = [POINTER(None)]
-    PRIV_guac_mem_free.restype = None
 
 enum_guac_parse_state = c_int# /tmp/guacamole-server/src/libguac/guacamole/parser-types.h: 57
 
