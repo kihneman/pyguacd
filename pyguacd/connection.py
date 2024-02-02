@@ -14,7 +14,7 @@ from .libguac_wrapper import (
     guac_socket_create_zmq, guac_socket_free
 )
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
-from .proc import GuacdProc
+from .proc import guacd_create_proc, GuacdProc
 
 
 def parse_identifier(zmq_addr: str, existing_client_ids: tuple) -> Optional[str]:
@@ -78,6 +78,31 @@ def parse_identifier(zmq_addr: str, existing_client_ids: tuple) -> Optional[str]
     guac_parser_free(parser_ptr)
     guac_socket_free(guac_sock)
     return ret_val
+
+
+async def wait_for_process_cleanup(proc_map: Dict[str, GuacdProc], connection_id: str):
+    """Wait for client process to finish and cleanup
+
+    :param proc_map:
+        The map of existing client processes from which the connection_id will be removed
+    :param connection_id:
+        The connection id of the client process that will be removed and cleaned up
+    """
+
+    proc = proc_map[connection_id]
+
+    # Wait for child process to finish
+    await asyncio.to_thread(proc.process.join)
+
+    # Remove client
+    if proc_map.pop(connection_id, None):
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" removed.')
+
+        # Close ZeroMQ socket and remove ipc file to previously existing process
+        proc.close()
+        proc.remove_socket_file()
+    else:
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" does not exist for removal.')
 
 
 async def guacd_route_connection(proc_map: Dict[str, GuacdProc], zmq_addr: str, zmq_context: Context) -> int:
