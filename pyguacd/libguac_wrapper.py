@@ -10,6 +10,7 @@ ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . \
     src/libguac/guacamole/parser.h \
     src/libguac/guacamole/protocol.h \
     src/libguac/guacamole/socket.h \
+    src/libguac/guacamole/socket-zmq.h \
     src/libguac/guacamole/user.h
 
 Do not modify this file.
@@ -2230,6 +2231,24 @@ if _libs["libguac"].has("guac_protocol_version_to_string", "cdecl"):
     guac_protocol_version_to_string = _libs["libguac"].get("guac_protocol_version_to_string", "cdecl")
     guac_protocol_version_to_string.argtypes = [guac_protocol_version]
     guac_protocol_version_to_string.restype = c_char_p
+
+# /usr/include/czmq_library.h: 108
+class struct__zsock_t(Structure):
+    pass
+
+zsock_t = struct__zsock_t# /usr/include/czmq_library.h: 108
+
+# /tmp/guacamole-server/src/libguac/guacamole/socket-zmq.h: 32
+if _libs["libguac"].has("guac_socket_open_zmq", "cdecl"):
+    guac_socket_open_zmq = _libs["libguac"].get("guac_socket_open_zmq", "cdecl")
+    guac_socket_open_zmq.argtypes = [zsock_t]
+    guac_socket_open_zmq.restype = POINTER(guac_socket)
+
+# /tmp/guacamole-server/src/libguac/guacamole/socket-zmq.h: 67
+if _libs["libguac"].has("guac_socket_create_zmq", "cdecl"):
+    guac_socket_create_zmq = _libs["libguac"].get("guac_socket_create_zmq", "cdecl")
+    guac_socket_create_zmq.argtypes = [c_int, String, c_bool]
+    guac_socket_create_zmq.restype = POINTER(guac_socket)
 
 struct_guac_user_info.__slots__ = [
     'optimal_width',
