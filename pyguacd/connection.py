@@ -137,14 +137,45 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], zmq_addr: str, 
 
     # If connection ID, retrieve existing process
     if identifier[0] == GUAC_CLIENT_ID_PREFIX:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, 'Selecting existing connection not implemented')
-        return 1
+        connection_id = identifier
+        proc = proc_map.get(connection_id)
+
+        if proc is None:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" does not exist')
+            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, 'Connection did not succeed')
+            return 1
+
+        else:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Joining existing connection "{connection_id}"')
 
     # Otherwise, create new client
     else:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier.decode()}"')
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
 
-        # Create new client
-        guacd_create_client(socket, identifier)
+        # Create new process
+        proc = await asyncio.to_thread(guacd_create_proc, identifier)
 
-        return 0
+        # Abort if no process exists for the requested connection
+        if proc is None:
+            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, "Connection did not succeed")
+            return 1
+
+        # Establish socket connection with process
+        proc.connect_parent(zmq_context)
+
+        # Log connection ID
+        client_ptr = proc.client_ptr
+        client = client_ptr.contents
+        connection_id = str(client.connection_id)
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection ID is "{connection_id}"')
+
+        # Store process, allowing other users to join
+        proc_map[connection_id] = proc
+
+        # Add task to join process and wait to remove the process from proc_map
+        proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, connection_id))
+
+    # Add new user (in the case of a new process, this will be the owner)
+    await proc.send_user_socket_addr(zmq_addr)
+
+    return 0
