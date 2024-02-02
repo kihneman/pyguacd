@@ -1,4 +1,22 @@
+# Copyright (c) 2024 Keeper Security, Inc. All rights reserved.
+#
+# Unless otherwise agreed in writing, this software and any associated
+# documentation files (the "Software") may be used and distributed solely
+# in accordance with the Keeper Connection Manager EULA:
+#
+#     https://www.keepersecurity.com/termsofuse.html?t=k
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+
+import os
 from enum import auto, IntEnum
+from os.path import dirname, expanduser, join
 
 
 EXIT_SUCCESS = 0
@@ -13,6 +31,10 @@ GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
 
 # The default port that guacd should bind to, if no other port is explicitly specified.
 GUACD_DEFAULT_BIND_PORT = '4822'
+
+# Unix Domain Socket file constants
+GUACD_SOCKET_DEFAULT_DIR = join(expanduser('~'), '.pyguacd', 'ipc')
+GUACD_SOCKET_DIR = os.environ.get('GUACD_SOCKET_DIR', GUACD_SOCKET_DEFAULT_DIR)
 
 # The number of milliseconds to wait for messages in any phase before
 # timing out and closing the connection with an error.
