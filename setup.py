@@ -8,7 +8,8 @@ setup(
     author='Keeper Security',
     author_email='ops@keepersecurity.com',
     packages=find_packages(),
-    install_requires=[],
+    package_data={'pyguacd.libguac': ['*.so']},
+    install_requires=['pyzmq'],
     entry_points={
         'console_scripts': [
             'pyguacd=pyguacd.__main__:main'
