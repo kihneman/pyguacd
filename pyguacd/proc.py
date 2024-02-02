@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing
+import threading
 from asyncio.exceptions import CancelledError
 from ctypes import c_int, POINTER
 from dataclasses import dataclass
@@ -9,7 +10,16 @@ from typing import Dict, Optional
 import zmq
 import zmq.asyncio
 
-from .libguac_wrapper import guac_client
+from . import libguac_wrapper
+from .constants import (
+    GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
+)
+from .libguac_wrapper import (
+    guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
+    guac_socket_create_zmq, guac_socket_require_keep_alive,
+    guac_user_alloc, guac_user_free, guac_user_handle_connection
+)
+from .log import guacd_log, guacd_log_guac_error
 from .utils.ipc_addr import new_ipc_addr, remove_ipc_addr_file
 
 
@@ -85,3 +95,174 @@ class GuacdProc:
     def remove_socket_file(self):
         """Remove the file for the socket"""
         remove_ipc_addr_file(self.zmq_socket_addr)
+
+
+def cleanup_client(client_ptr: POINTER(guac_client)):
+    """Stop and free the guac client
+
+    :param client_ptr: Guac client pointer to clean up
+    """
+
+    # Request client to stop/disconnect
+    guac_client_stop(client_ptr)
+
+    # Attempt to free client cleanly
+    guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, 'Requesting termination of client...')
+
+    # Attempt to free client (this may never return if the client is malfunctioning)
+    guac_client_free(client_ptr)
+    guacd_log(GuacClientLogLevel.GUAC_LOG_DEBUG, 'Client terminated successfully.')
+
+
+def guacd_user_thread(client_ptr: POINTER(guac_client), owner: int, user_socket_addr: str,
+                      guacd_proc_stop_event: threading.Event):
+    """Handles a libguac guac_user lifecycle from allocation to guac_user_free
+
+    :param client_ptr:
+        Guac client pointer to which the new guac user will connect
+    :param owner:
+        Whether this user is the owner (1) or not (0)
+    :param user_socket_addr:
+        The address of the ZeroMQ socket for the user connection
+    :param guacd_proc_stop_event:
+        Threading event to stop process if this user disconnects and is the last user
+    """
+
+    client = client_ptr.contents
+
+    # Create skeleton user
+    user_ptr = guac_user_alloc()
+    user = user_ptr.contents
+    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
+    user.client = client_ptr
+    user.owner = owner
+
+    # Handle user connection from handshake until disconnect/completion
+    guac_user_handle_connection(user_ptr, c_int(GUACD_USEC_TIMEOUT))
+
+    # Clean up
+    guac_user_free(user_ptr)
+
+    # Stop client and prevent future users if all users are disconnected
+    if client.connected_users == 0:
+        guacd_log(
+            GuacClientLogLevel.GUAC_LOG_INFO, f'Last user of connection "{client.connection_id}" disconnected'
+        )
+        guacd_proc_stop_event.set()
+
+
+async def guacd_proc_serve_users(proc: GuacdProc):
+    """Continuously serve user connections for this client until last user disconnects
+
+    :param proc: Process data and methods
+    """
+
+    # Store asyncio tasks of user threads by the user socket addr
+    guacd_user_thread_tasks: Dict[str, asyncio.Task] = dict()
+
+    # Create threading event with awaitable task
+    guacd_proc_stop_event = threading.Event()
+    guacd_proc_stop_coro = asyncio.to_thread(guacd_proc_stop_event.wait)
+    guacd_proc_stop_task = asyncio.create_task(guacd_proc_stop_coro)
+
+    # The first file descriptor is the owner
+    owner = 1
+
+    # Bind socket to begin receiving user connections from parent
+    proc.bind_client()
+
+    while True:
+        # Wait for either a new user socket or threading event "guacd_proc_stop_event"
+        recv_user_socket_task = asyncio.create_task(proc.recv_user_socket_addr())
+        done, pending = await asyncio.wait(
+            [recv_user_socket_task, guacd_proc_stop_task], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        if guacd_proc_stop_task in done:
+            # Gracefully exit process
+            recv_user_socket_task.cancel()
+            await recv_user_socket_task
+            break
+
+        user_socket_addr = recv_user_socket_task.result()
+        if not user_socket_addr:
+            guacd_log(
+                GuacClientLogLevel.GUAC_LOG_ERROR,
+                'Client ZMQ socket was canceled' if user_socket_addr is None else 'Invalid (empty) user socket address'
+            )
+            continue
+
+        # Launch user thread
+        guacd_user_thread_coro = asyncio.to_thread(
+            guacd_user_thread, proc.client_ptr, owner, user_socket_addr, guacd_proc_stop_event
+        )
+        guacd_user_thread_tasks[user_socket_addr] = asyncio.create_task(guacd_user_thread_coro, name=user_socket_addr)
+
+        # Future file descriptors are not owners
+        owner = 0
+
+
+def guacd_exec_proc(proc: GuacdProc, protocol: str):
+    """
+    Starts protocol-specific handling on the given process by loading the client
+    plugin for that protocol. This function does NOT return. It initializes the
+    process with protocol-specific handlers and then runs until guacd_proc_serve_users()
+    completes.
+
+    :param proc:
+        The process that any new users received along proc.zmq_socket should be added
+        to (after the process has been initialized for the given protocol).
+    :param protocol:
+        The protocol used to initialize the given process.
+    """
+
+    client_ptr = proc.client_ptr
+    client = client_ptr.contents
+
+    # Init client for selected protocol
+    if guac_client_load_plugin(client_ptr, protocol):
+        # Log error
+        guac_error = libguac_wrapper.__guac_error()[0]
+        if guac_error == GuacStatus.GUAC_STATUS_NOT_FOUND:
+            guacd_log(
+                GuacClientLogLevel.GUAC_LOG_WARNING, f'Support for protocol "{protocol}" is not installed'
+            )
+        else:
+            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, 'Unable to load client plugin')
+
+        cleanup_client(client_ptr)
+
+    # Enable keep alive on the broadcast socket
+    client_socket_ptr = client.socket
+    guac_socket_require_keep_alive(client_socket_ptr)
+
+    asyncio.run(guacd_proc_serve_users(proc))
+
+    # Clean up
+    proc.close()
+    cleanup_client(client_ptr)
+
+
+def guacd_create_proc(protocol: str) -> Optional[GuacdProc]:
+    """Creates new guacd client process and returns with process info
+
+    :param protocol:
+        The protocol used to initialize a new process.
+    :return:
+        Returns the process info or None if starting the process times out
+    """
+
+    # Associate new client
+    proc = GuacdProc(guac_client_alloc())
+
+    proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
+    proc.process.start()
+
+    # Wait for process to be ready
+    proc.ready_event.wait(2)
+    if proc.ready_event.is_set():
+        return proc
+    else:
+        proc.process.kill()
+        proc.process.close()
+        return None
