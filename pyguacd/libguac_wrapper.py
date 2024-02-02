@@ -1,7 +1,17 @@
 r"""Wrapper for user-handlers.h
 
 Generated with:
-/tmp/guacamole-server/venv-guacd/bin/ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . -o libguac_wrapper.py src/libguac/user-handlers.h src/libguac/guacamole/client.h src/libguac/guacamole/error.h src/libguac/guacamole/error-types.h src/libguac/guacamole/mem.h src/libguac/guacamole/parser.h src/libguac/guacamole/protocol.h src/libguac/guacamole/socket.h src/libguac/guacamole/user.h
+ctypesgen -llibguac -L /opt/guacamole/lib -I /opt/guacamole/include -I . \
+    -o libguac_wrapper.py \
+    src/libguac/user-handlers.h \
+    src/libguac/guacamole/client.h \
+    src/libguac/guacamole/error.h \
+    src/libguac/guacamole/error-types.h \
+    src/libguac/guacamole/mem.h \
+    src/libguac/guacamole/parser.h \
+    src/libguac/guacamole/protocol.h \
+    src/libguac/guacamole/socket.h \
+    src/libguac/guacamole/user.h
 
 Do not modify this file.
 """
