@@ -24,7 +24,7 @@ EXIT_FAILURE = 1
 GUACD_LOG_NAME = 'guacd'
 
 # The character prefix which identifies a client ID.
-GUAC_CLIENT_ID_PREFIX = b'$'
+GUAC_CLIENT_ID_PREFIX = '$'
 
 # The default host that guacd should bind to, if no other host is explicitly specified.
 GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
@@ -44,6 +44,9 @@ GUACD_TIMEOUT = 15000
 # timing out and closing the conncetion with an error. This is always
 # equal to GUACD_TIMEOUT * 1000.
 GUACD_USEC_TIMEOUT = (GUACD_TIMEOUT*1000)
+
+# The operation could not be performed as the requested resource does not exist.
+GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND = 0x0204
 
 # Error strings
 GUAC_STATUS_SUCCESS_STR           = "Success"
