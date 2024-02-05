@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from ctypes import cast, c_char_p, c_int
 from typing import Dict, Optional
 
@@ -10,33 +11,68 @@ from .constants import (
     GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT, GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND
 )
 from .libguac_wrapper import (
-    String, guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_protocol_send_error,
-    guac_socket_create_zmq, guac_socket_free
+    guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_protocol_send_error,
+    guac_socket_create_zmq, guac_socket, guac_socket_free, POINTER, String
 )
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .proc import guacd_create_proc, GuacdProc
 
 
-def parse_identifier(zmq_addr: str, existing_client_ids: tuple) -> Optional[str]:
-    """Parse the identifier for a new user connection
+def get_client_proc(proc_map: Dict[str, GuacdProc], proc_map_lock: threading.Lock, zmq_addr: str) -> Optional[GuacdProc]:
+    """Get or create the client process and return corresponding GuacdProc if successful
 
-    Blocking libguac calls are made to do the following:
-    - Allocate a new libguac parser
-    - Open a ZeroMQ guac_socket
-    - Parse identifer on the new guac_socket
-    - Close parser
-    - Close ZeroMQ guac_socket
+    :param proc_map:
+        The map of existing client processes.
 
-    The ZeroMQ guac_socket is not kept because ZeroMQ sockets are not thread safe,
-    and this is blocking code intended to be run in an asyncio thread.
+    :param proc_map_lock:
+        Threading lock for controlling access to proc_map
 
     :param zmq_addr:
-        ZeroMQ socket address used for connection to the new user.
-    :param existing_client_ids:
-        The existing client ids from proc_map. This is used if the parsed identifier is a connection id.
-        If the identifier connection id is not found then, then an error is sent to the user on the socket.
+        ZeroMQ address to create a new guac_socket for the user connection
+
     :return:
-        The identifer string if parsing is successful, otherwise None.
+        The GuacdProc for the client process if successful, otherwise None
+    """
+
+    # Open a ZeroMQ guac_socket and parse identifier
+    guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+    identifier = parse_identifier(guac_sock)
+
+    if identifier is None:
+        proc = None
+
+    # If connection ID, retrieve existing process
+    elif identifier[0] == GUAC_CLIENT_ID_PREFIX:
+        with proc_map_lock:
+            proc = proc_map.get(identifier)
+
+        # Warn and ward off client if requested connection does not exist
+        if proc is None:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{identifier}" does not exist')
+            guac_protocol_send_error(guac_sock, "No such connection.", GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND)
+            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, 'Connection did not succeed')
+
+        else:
+            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Joining existing connection "{identifier}"')
+
+    # Otherwise, create new client
+    else:
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
+
+        # Create new process
+        proc = guacd_create_proc(identifier)
+
+    guac_socket_free(guac_sock)
+    return proc
+
+
+def parse_identifier(guac_sock: POINTER(guac_socket)) -> Optional[str]:
+    """Parse the identifier for a new user connection and return the identifier if successful
+
+    :param guac_sock:
+        Pointer to libguac ZeroMQ guac_socket
+    :return:
+        The identifer string if parsing is successful, otherwise None
     """
 
     parser_ptr = guac_parser_alloc()
@@ -46,9 +82,6 @@ def parse_identifier(zmq_addr: str, existing_client_ids: tuple) -> Optional[str]
     libguac_wrapper.__guac_error()[0] = c_int(GuacStatus.GUAC_STATUS_SUCCESS)
     libguac_wrapper.__guac_error_message()[0] = String(b'').raw
 
-    # Open a ZeroMQ guac_socket using libguac call
-    guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
-
     # Get protocol from select instruction
     parser_result = guac_parser_expect(parser_ptr, guac_sock, c_int(GUACD_USEC_TIMEOUT), String(b'select'))
 
@@ -56,28 +89,22 @@ def parse_identifier(zmq_addr: str, existing_client_ids: tuple) -> Optional[str]
         # Log error
         guacd_log_handshake_failure()
         guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_ERROR, f'Error reading "select" ({parser_result})')
-        ret_val = None
+        identifier = None
 
     # Validate args to select
     elif parser.argc != 1:
         # Log error
         guacd_log_handshake_failure()
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, f'Bad number of arguments to "select" ({parser.argc})')
-        ret_val = None
+        identifier = None
 
     else:
         # Get Python string from libguac parsed value
         identifier = bytes(cast(parser.argv[0], c_char_p).value).decode()
 
-        # If identifier is connection id and not found send error on socket
-        if identifier[0] == GUAC_CLIENT_ID_PREFIX and identifier not in existing_client_ids:
-            guac_protocol_send_error(guac_sock, "No such connection.", GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND)
-        ret_val = identifier
-
-    # Close parser and socket
+    # Close parser
     guac_parser_free(parser_ptr)
-    guac_socket_free(guac_sock)
-    return ret_val
+    return identifier
 
 
 async def wait_for_process_cleanup(proc_map: Dict[str, GuacdProc], connection_id: str):
@@ -105,63 +132,39 @@ async def wait_for_process_cleanup(proc_map: Dict[str, GuacdProc], connection_id
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" does not exist for removal.')
 
 
-async def guacd_route_connection(proc_map: Dict[str, GuacdProc], zmq_addr: str, zmq_context: Context) -> int:
+async def guacd_route_connection(proc_map: Dict[str, GuacdProc], proc_map_lock: threading.Lock, zmq_addr: str) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
-    protocol, adding new users and creating new client processes as needed. If a
-    new process is created, this function blocks until that process terminates,
-    automatically deregistering the process at that point.
+    protocol, adding new users and creating new client processes as needed.
 
-    The socket provided will be automatically freed when the connection
-    terminates unless routing fails, in which case non-zero is returned.
+    A socket on the provided address will be created and automatically freed when the connection terminates.
 
     :param proc_map:
         The map of existing client processes.
 
+    :param proc_map_lock:
+        Threading lock for controlling access to proc_map
+
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
-
-    :param zmq_context:
-        For making ZeroMQ client process connection to send the above zmq_addr
 
     :return:
         Zero if the connection was successfully routed, non-zero if routing has failed.
     """
 
-    # Run blocking parse_identifier in asyncio thread
-    identifier = await asyncio.to_thread(parse_identifier, zmq_addr, tuple(proc_map.keys()))
+    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, proc_map_lock, zmq_addr)
 
-    if identifier is None:
+    # Abort if no process exists for the requested connection
+    if proc is None:
+        guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, "Connection did not succeed")
         return 1
 
-    # If connection ID, retrieve existing process
-    if identifier[0] == GUAC_CLIENT_ID_PREFIX:
-        connection_id = identifier
-        proc = proc_map.get(connection_id)
-
-        if proc is None:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" does not exist')
-            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, 'Connection did not succeed')
-            return 1
-
-        else:
-            guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Joining existing connection "{connection_id}"')
-
-    # Otherwise, create new client
-    else:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
-
-        # Create new process
-        proc = await asyncio.to_thread(guacd_create_proc, identifier)
-
-        # Abort if no process exists for the requested connection
-        if proc is None:
-            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, "Connection did not succeed")
-            return 1
+    # If new process was created, manage that process
+    if proc.new_process:
 
         # Establish socket connection with process
-        proc.connect_parent(zmq_context)
+        proc.connect_parent()
 
         # Log connection ID
         client_ptr = proc.client_ptr
@@ -174,6 +177,9 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], zmq_addr: str, 
 
         # Add task to join process and wait to remove the process from proc_map
         proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, connection_id))
+
+        # Finished managing new process
+        proc.new_process = False
 
     # Add new user (in the case of a new process, this will be the owner)
     await proc.send_user_socket_addr(zmq_addr)
