@@ -31,6 +31,9 @@ class GuacdProc:
     # Prevents simultaneous use of the process socket by multiple users
     lock: Optional[asyncio.Lock] = None
 
+    # Indicate parent needs to manage new process
+    new_process: bool = True
+
     # Used by parent to join client process
     process: Optional[Process] = None
 
@@ -60,12 +63,10 @@ class GuacdProc:
         self.zmq_socket.bind(self.zmq_socket_addr)
         self.ready_event.set()
 
-    def connect_parent(self, zmq_context: zmq.asyncio.Context):
-        """Create zmq_socket and connect parent to client process for sending user socket addresses
-
-        :param zmq_context: parent ZeroMQ context used to create the new socket
-        """
-        self.zmq_socket = zmq_context.socket(zmq.PAIR)
+    def connect_parent(self):
+        """Create zmq_socket and connect parent to client process for sending user socket addresses"""
+        self.zmq_context = zmq.asyncio.Context()
+        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
         self.zmq_socket.connect(self.zmq_socket_addr)
 
     async def recv_user_socket_addr(self) -> Optional[str]:
@@ -89,8 +90,8 @@ class GuacdProc:
             await self.zmq_socket.send(zmq_user_addr.encode())
 
     def close(self):
-        """Close the ZeroMQ socket between parent and client"""
-        self.zmq_socket.close()
+        """Close the ZeroMQ socket and destroy context"""
+        self.zmq_context.destroy()
 
     def remove_socket_file(self):
         """Remove the file for the socket"""
