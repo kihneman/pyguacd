@@ -1,10 +1,8 @@
 import asyncio
-import threading
 from ctypes import cast, c_char_p, c_int
-from typing import Dict, Optional
+from typing import Optional
 
 import zmq
-from zmq.asyncio import Context
 
 from . import libguac_wrapper
 from .constants import (
@@ -15,17 +13,14 @@ from .libguac_wrapper import (
     guac_socket_create_zmq, guac_socket, guac_socket_free, POINTER, String
 )
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
-from .proc import guacd_create_proc, GuacdProc
+from .proc import guacd_create_proc, GuacdProc, GuacdProcMap
 
 
-def get_client_proc(proc_map: Dict[str, GuacdProc], proc_map_lock: threading.Lock, zmq_addr: str) -> Optional[GuacdProc]:
+def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str) -> Optional[GuacdProc]:
     """Get or create the client process and return corresponding GuacdProc if successful
 
     :param proc_map:
         The map of existing client processes.
-
-    :param proc_map_lock:
-        Threading lock for controlling access to proc_map
 
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
@@ -43,8 +38,7 @@ def get_client_proc(proc_map: Dict[str, GuacdProc], proc_map_lock: threading.Loc
 
     # If connection ID, retrieve existing process
     elif identifier[0] == GUAC_CLIENT_ID_PREFIX:
-        with proc_map_lock:
-            proc = proc_map.get(identifier)
+        proc = proc_map.get_process(identifier)
 
         # Warn and ward off client if requested connection does not exist
         if proc is None:
@@ -107,32 +101,27 @@ def parse_identifier(guac_sock: POINTER(guac_socket)) -> Optional[str]:
     return identifier
 
 
-async def wait_for_process_cleanup(proc_map: Dict[str, GuacdProc], connection_id: str):
+async def wait_for_process_cleanup(proc_map: GuacdProcMap, proc: GuacdProc):
     """Wait for client process to finish and cleanup
 
     :param proc_map:
-        The map of existing client processes from which the connection_id will be removed
-    :param connection_id:
-        The connection id of the client process that will be removed and cleaned up
+        The map of existing client processes from which the process will be removed
+    :param proc:
+        The client process that will be removed and cleaned up
     """
 
-    proc = proc_map[connection_id]
-
-    # Wait for child process to finish
-    await asyncio.to_thread(proc.process.join)
-
-    # Remove client
-    if proc_map.pop(connection_id, None):
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" removed.')
+    if await proc_map.wait_to_remove_process(proc):
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" removed.')
 
         # Close ZeroMQ socket and remove ipc file to previously existing process
         proc.close()
         proc.remove_socket_file()
+
     else:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{connection_id}" does not exist for removal.')
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" does not exist for removal.')
 
 
-async def guacd_route_connection(proc_map: Dict[str, GuacdProc], proc_map_lock: threading.Lock, zmq_addr: str) -> int:
+async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -143,9 +132,6 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], proc_map_lock: 
     :param proc_map:
         The map of existing client processes.
 
-    :param proc_map_lock:
-        Threading lock for controlling access to proc_map
-
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
 
@@ -153,7 +139,7 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], proc_map_lock: 
         Zero if the connection was successfully routed, non-zero if routing has failed.
     """
 
-    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, proc_map_lock, zmq_addr)
+    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, zmq_addr)
 
     # Abort if no process exists for the requested connection
     if proc is None:
@@ -161,25 +147,12 @@ async def guacd_route_connection(proc_map: Dict[str, GuacdProc], proc_map_lock: 
         return 1
 
     # If new process was created, manage that process
-    if proc.new_process:
-
-        # Establish socket connection with process
-        proc.connect_parent()
-
+    if proc_map.connect_new_process(proc):
         # Log connection ID
-        client_ptr = proc.client_ptr
-        client = client_ptr.contents
-        connection_id = str(client.connection_id)
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection ID is "{connection_id}"')
-
-        # Store process, allowing other users to join
-        proc_map[connection_id] = proc
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection ID is "{proc.connection_id}"')
 
         # Add task to join process and wait to remove the process from proc_map
-        proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, connection_id))
-
-        # Finished managing new process
-        proc.new_process = False
+        proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, proc))
 
     # Add new user (in the case of a new process, this will be the owner)
     await proc.send_user_socket_addr(zmq_addr)

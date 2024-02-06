@@ -5,7 +5,7 @@ from asyncio.exceptions import CancelledError
 from ctypes import c_int, POINTER
 from dataclasses import dataclass
 from multiprocessing import Process
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import zmq
 import zmq.asyncio
@@ -27,12 +27,10 @@ from .utils.ipc_addr import new_ipc_addr, remove_ipc_addr_file
 class GuacdProc:
     """Data and methods used by parent and client process similar to C code guacd_proc struct in proc.h"""
     client_ptr: POINTER(guac_client)
+    connection_id: Optional[str] = None
 
     # Prevents simultaneous use of the process socket by multiple users
     lock: Optional[asyncio.Lock] = None
-
-    # Indicate parent needs to manage new process
-    new_process: bool = True
 
     # Used by parent to join client process
     process: Optional[Process] = None
@@ -40,7 +38,7 @@ class GuacdProc:
     # Indicates when process socket is ready for connections
     ready_event: Optional[multiprocessing.Event] = None
 
-    # Final asyncio task created by parent to clean up after joining process
+    # Final asyncio task created by GuacdProcMap to clean up after joining process
     task: Optional[asyncio.Task] = None
 
     # Process socket ZeroMQ data
@@ -48,7 +46,12 @@ class GuacdProc:
     zmq_context: Optional[zmq.asyncio.Context] = None
     zmq_socket: Optional[zmq.asyncio.Socket] = None
 
+    # Private check if parent has been connected
+    _parent_connected = False
+
     def __post_init__(self):
+        self.connection_id = str(self.client_ptr.contents.connection_id)
+
         # Initialize synchronization vars
         self.lock = asyncio.Lock()
         self.ready_event = multiprocessing.Event()
@@ -63,11 +66,20 @@ class GuacdProc:
         self.zmq_socket.bind(self.zmq_socket_addr)
         self.ready_event.set()
 
-    def connect_parent(self):
-        """Create zmq_socket and connect parent to client process for sending user socket addresses"""
-        self.zmq_context = zmq.asyncio.Context()
-        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
-        self.zmq_socket.connect(self.zmq_socket_addr)
+    def connect_parent(self) -> bool:
+        """Create zmq_socket and connect parent to client process if process is new
+
+        :return: True if created new connection, otherwise False
+        """
+        if self._parent_connected:
+            return False
+
+        else:
+            self.zmq_context = zmq.asyncio.Context()
+            self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+            self.zmq_socket.connect(self.zmq_socket_addr)
+            self._parent_connected = True
+            return True
 
     async def recv_user_socket_addr(self) -> Optional[str]:
         """Receive new user connection address from parent
@@ -96,6 +108,52 @@ class GuacdProc:
     def remove_socket_file(self):
         """Remove the file for the socket"""
         remove_ipc_addr_file(self.zmq_socket_addr)
+
+
+class GuacdProcMap:
+    """Map of guacd client processes
+
+    This wraps a dictionary but also has thread-safety by using a threading.Lock.
+    Furthermore, methods are included for easily adding (connecting), retrieving, and removing client processes.
+    """
+    def __init__(self):
+        self._proc_map: Dict[str, GuacdProc] = dict()
+        self._proc_map_lock: threading.Lock = threading.Lock()
+
+    def connect_new_process(self, proc: GuacdProc) -> bool:
+        """Connect to process and add to GuacdProcMap if process is new
+
+        :param proc: The client process to check and connect if new
+        :return: True if made new connection to process, otherwise False
+        """
+        if proc.connect_parent():
+            with self._proc_map_lock:
+                self._proc_map[proc.connection_id] = proc
+                return True
+        else:
+            return False
+
+    def get_process(self, connection_id: str) -> GuacdProc:
+        """Get process associated with connection_id
+
+        :param connection_id: The connection id to look for
+        :return: The client process associated with connection_id or None if not found
+        """
+        with self._proc_map_lock:
+            return self._proc_map.get(connection_id)
+
+    async def wait_to_remove_process(self, proc: GuacdProc) -> bool:
+        """Wait for child process to finish and remove from GuacdProcMap
+
+        :param proc: The process to wait for and remove from GuacdProcMap
+        :return: True if removed from GuacdProcMap, otherwise False
+        """
+        await asyncio.to_thread(proc.process.join)
+
+        with self._proc_map_lock:
+            pop_process = self._proc_map.pop(proc.connection_id, None)
+
+        return pop_process is not None
 
 
 def cleanup_client(client_ptr: POINTER(guac_client)):
