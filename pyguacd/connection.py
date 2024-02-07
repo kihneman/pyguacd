@@ -44,19 +44,20 @@ def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str) -> Optional[GuacdProc
         if proc is None:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{identifier}" does not exist')
             guac_protocol_send_error(guac_sock, "No such connection.", GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND)
-            guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, 'Connection did not succeed')
 
         else:
             guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Joining existing connection "{identifier}"')
 
+        guac_socket_free(guac_sock)
+
     # Otherwise, create new client
     else:
-        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
+        guac_socket_free(guac_sock)
 
         # Create new process
+        guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
         proc = guacd_create_proc(identifier)
 
-    guac_socket_free(guac_sock)
     return proc
 
 
