@@ -47,7 +47,7 @@ async def check_zmq_monitor_events(zmq_monitor: zmq.asyncio.Socket, zmq_events: 
     """
 
     for expect_event in zmq_events:
-        if error_msg := await process_monitor_event(zmq_monitor, expect_event) is not None:
+        if (error_msg := await process_monitor_event(zmq_monitor, expect_event)) is not None:
             return error_msg
 
     return None
