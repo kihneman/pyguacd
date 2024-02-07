@@ -13,8 +13,6 @@ async def process_monitor_event(zmq_monitor: zmq.asyncio.Socket, expect_event: z
         ZeroMQ Socket returned from the get_monitor_socket method of another ZeroMQ Socket object
     :param expect_event:
         The expected zmq.Event
-    :param msg:
-        The optional message to print if event matches
     :return:
         None if event matches, error message otherwise
     """
