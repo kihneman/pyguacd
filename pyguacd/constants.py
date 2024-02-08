@@ -30,7 +30,7 @@ GUAC_CLIENT_ID_PREFIX = '$'
 GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
 
 # The default port that guacd should bind to, if no other port is explicitly specified.
-GUACD_DEFAULT_BIND_PORT = '4822'
+GUACD_DEFAULT_BIND_PORT = 4822
 
 # Unix Domain Socket file constants
 GUACD_SOCKET_DEFAULT_DIR = join(expanduser('~'), '.pyguacd', 'ipc')
