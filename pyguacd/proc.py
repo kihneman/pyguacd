@@ -12,7 +12,7 @@ import zmq.asyncio
 
 from . import libguac_wrapper
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUACD_USEC_TIMEOUT
+    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_PROC_START_TIMEOUT, GUACD_USEC_TIMEOUT
 )
 from .libguac_wrapper import (
     guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
@@ -318,7 +318,7 @@ def guacd_create_proc(protocol: str) -> Optional[GuacdProc]:
     proc.process.start()
 
     # Wait for process to be ready
-    proc.ready_event.wait(2)
+    proc.ready_event.wait(GUAC_CLIENT_PROC_START_TIMEOUT)
     if proc.ready_event.is_set():
         return proc
     else:
