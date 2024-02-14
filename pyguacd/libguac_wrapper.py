@@ -867,7 +867,8 @@ del loaderclass
 
 # End loader
 
-add_library_search_dirs(['/opt/guacamole/lib'])
+dirname = os.path.dirname(__file__)
+add_library_search_dirs([os.path.join(dirname, 'libguac')])
 
 # Begin libraries
 _libs["libguac"] = load_library("libguac")
