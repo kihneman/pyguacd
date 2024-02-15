@@ -16,7 +16,7 @@ from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .proc import guacd_create_proc, GuacdProc, GuacdProcMap
 
 
-def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str) -> Optional[GuacdProc]:
+def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir: str) -> Optional[GuacdProc]:
     """Get or create the client process and return corresponding GuacdProc if successful
 
     :param proc_map:
@@ -24,6 +24,9 @@ def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str) -> Optional[GuacdProc
 
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
+
+    :param tmp_dir:
+        Temporary directory for securely storing socket files
 
     :return:
         The GuacdProc for the client process if successful, otherwise None
@@ -56,7 +59,7 @@ def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str) -> Optional[GuacdProc
 
         # Create new process
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Creating new client for protocol "{identifier}"')
-        proc = guacd_create_proc(identifier)
+        proc = guacd_create_proc(identifier, tmp_dir)
 
     return proc
 
@@ -114,15 +117,14 @@ async def wait_for_process_cleanup(proc_map: GuacdProcMap, proc: GuacdProc):
     if await proc_map.wait_to_remove_process(proc):
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" removed.')
 
-        # Close ZeroMQ socket and remove ipc file to previously existing process
+        # Close ZeroMQ socket to previously existing process
         proc.close()
-        proc.remove_socket_file()
 
     else:
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" does not exist for removal.')
 
 
-async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str) -> int:
+async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir: str) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -136,11 +138,14 @@ async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str) -> int:
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
 
+    :param tmp_dir:
+        Temporary directory for securely storing socket files
+
     :return:
         Zero if the connection was successfully routed, non-zero if routing has failed.
     """
 
-    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, zmq_addr)
+    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, zmq_addr, tmp_dir)
 
     # Abort if no process exists for the requested connection
     if proc is None:

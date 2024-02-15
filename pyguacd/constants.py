@@ -38,10 +38,6 @@ GUACD_DEFAULT_BIND_PORT = 4822
 # Directory for *.so library files
 GUACD_LIB_DIR = join(dirname(__file__), 'libguac')
 
-# Unix Domain Socket file constants
-GUACD_SOCKET_DEFAULT_DIR = join(expanduser('~'), '.pyguacd', 'ipc')
-GUACD_SOCKET_DIR = os.environ.get('GUACD_SOCKET_DIR', GUACD_SOCKET_DEFAULT_DIR)
-
 # The number of milliseconds to wait for messages in any phase before
 # timing out and closing the connection with an error.
 GUACD_TIMEOUT = 15000

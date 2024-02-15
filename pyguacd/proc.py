@@ -20,13 +20,18 @@ from .libguac_wrapper import (
     guac_user_alloc, guac_user_free, guac_user_handle_connection
 )
 from .log import guacd_log, guacd_log_guac_error
-from .utils.ipc_addr import new_ipc_addr, remove_ipc_addr_file
+from .utils.ipc_addr import new_ipc_addr
 
 
 @dataclass
 class GuacdProc:
     """Data and methods used by parent and client process similar to C code guacd_proc struct in proc.h"""
     client_ptr: POINTER(guac_client)
+
+    # Temporary directory for securely storing socket files
+    tmp_dir: str
+
+    # Same as client connection_id. Repeated here for convenience
     connection_id: Optional[str] = None
 
     # Prevents simultaneous use of the process socket by multiple users
@@ -57,7 +62,7 @@ class GuacdProc:
         self.ready_event = multiprocessing.Event()
 
         # Create new ZeroMQ IPC address shared between parent and client process
-        self.zmq_socket_addr = new_ipc_addr()
+        self.zmq_socket_addr = new_ipc_addr(self.tmp_dir)
 
     def bind_client(self):
         """Create zmq_socket and bind client for receiving user socket addresses from parent"""
@@ -104,10 +109,6 @@ class GuacdProc:
     def close(self):
         """Close the ZeroMQ socket and destroy context"""
         self.zmq_context.destroy()
-
-    def remove_socket_file(self):
-        """Remove the file for the socket"""
-        remove_ipc_addr_file(self.zmq_socket_addr)
 
 
 class GuacdProcMap:
@@ -302,17 +303,21 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str):
     cleanup_client(client_ptr)
 
 
-def guacd_create_proc(protocol: str) -> Optional[GuacdProc]:
+def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
     """Creates new guacd client process and returns with process info
 
     :param protocol:
         The protocol used to initialize a new process.
+
+    :param tmp_dir:
+        Temporary directory for securely storing socket files
+
     :return:
         Returns the process info or None if starting the process times out
     """
 
     # Associate new client
-    proc = GuacdProc(guac_client_alloc())
+    proc = GuacdProc(guac_client_alloc(), tmp_dir)
 
     proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
     proc.process.start()

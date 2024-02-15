@@ -17,16 +17,14 @@
 import os
 from uuid import uuid4
 
-from ..constants import GUACD_SOCKET_DIR
 
-
-def new_ipc_addr() -> str:
+def new_ipc_addr(tmp_dir) -> str:
     """Create a new random ZeroMQ IPC address in GUACD_SOCKET_DIR
 
     :return: Returns the new IPC address as a string, e.g. ipc:///tmp/ipc/a2812a0d1aad435cb83d043dae5a935a
     """
     uid = uuid4().hex
-    file_path = os.path.join(GUACD_SOCKET_DIR, uid)
+    file_path = os.path.join(tmp_dir, uid)
     return f'ipc://{file_path}'
 
 

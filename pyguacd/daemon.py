@@ -1,17 +1,17 @@
 import asyncio
-import os
 from argparse import ArgumentParser
 from asyncio import create_task, StreamReader, StreamWriter, Task
+from tempfile import TemporaryDirectory
 from typing import Iterable
 
 import zmq
 import zmq.asyncio
 
 from .connection import guacd_route_connection
-from .constants import GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT, GUACD_SOCKET_DIR
+from .constants import GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT
 from .log import guacd_log
 from .proc import GuacdProcMap
-from .utils.ipc_addr import new_ipc_addr, remove_ipc_addr_file
+from .utils.ipc_addr import new_ipc_addr
 from .utils.zmq_monitor import check_zmq_monitor_events
 
 
@@ -90,12 +90,24 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_
 class TcpHandler:
     """Class to keep state between TCP connections
 
-    The only data to keep between TCP connections is proc_map.
+    Primarily the data to keep between TCP connections is proc_map.
+
+    In addition, there is a temp directory for secure storage of ZeroMQ socket file.
+    Within this directory each connection has another nested temp directory for ZeroMQ socket files.
+    There is a cleanup method for removing the top level temp directory and all contents.
     """
 
     def __init__(self):
+        # Initialize temp directory for all TCP connections
+        self._temporary_directory = TemporaryDirectory()
+        self.server_tmp_dir = self._temporary_directory.name
+
         # The map of existing guacd client processes
         self.proc_map: GuacdProcMap = GuacdProcMap()
+
+    def cleanup(self):
+        # Cleanup temp directory and contents for all TCP connections
+        self._temporary_directory.cleanup()
 
     async def handle(self, tcp_reader: StreamReader, tcp_writer: StreamWriter):
         """Callback for aysncio.start_server()
@@ -103,10 +115,15 @@ class TcpHandler:
         This handles a TCP connection from connect to disconnect
         """
 
-        with zmq.asyncio.Context() as ctx:
-            # Create and bind Zero MQ socket to libguac functions guac_parser_expect and guac_user_handle_connection
+        # Two context manager variables:
+        # - ZeroMQ context
+        # - Temp directory for this connection within top level temp directory for server
+        with zmq.asyncio.Context() as ctx, TemporaryDirectory(dir=self.server_tmp_dir) as tmp_dir:
+            # Create and bind Zero MQ socket. Two connections are made to this socket from libguac by:
+            # - guac_parser_expect in connection.py for parsing identifier
+            # - guac_user_handle_connection in proc.py for handling connection
             zmq_user_socket = ctx.socket(zmq.PAIR)
-            zmq_user_addr = new_ipc_addr()
+            zmq_user_addr = new_ipc_addr(tmp_dir)
             zmq_user_socket.bind(zmq_user_addr)
 
             # Create monitor socket for the above user socket
@@ -121,11 +138,8 @@ class TcpHandler:
             # Wait for ZeroMQ socket disconnect and guacd_route_connection to finish
             await asyncio.wait([
                 create_task(monitor_zmq_socket(zmq_user_monitor, connection_tasks)),
-                create_task(guacd_route_connection(self.proc_map, zmq_user_addr)),
+                create_task(guacd_route_connection(self.proc_map, zmq_user_addr, tmp_dir)),
             ])
-
-        # Clean up
-        remove_ipc_addr_file(zmq_user_addr)
 
 
 async def run_server(bind_host: str, bind_port: int):
@@ -151,6 +165,9 @@ async def run_server(bind_host: str, bind_port: int):
         except asyncio.exceptions.CancelledError:
             print('Server closed')
 
+    # Cleanup temp directory
+    handler.cleanup()
+
 
 def main():
     """Parse command line and other setup before launching asyncio TCP server"""
@@ -160,9 +177,6 @@ def main():
     parser.add_argument('-b', '--bind-host', default=GUACD_DEFAULT_BIND_HOST)
     parser.add_argument('-l', '--bind-port', type=int, default=GUACD_DEFAULT_BIND_PORT)
     ns = parser.parse_args()
-
-    # Make directory for ZeroMQ IPC address files
-    os.makedirs(GUACD_SOCKET_DIR, exist_ok=True)
 
     # Run asyncio TCP server
     asyncio.run(run_server(ns.bind_host, ns.bind_port))
