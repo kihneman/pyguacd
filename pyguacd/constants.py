@@ -35,6 +35,9 @@ GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
 # The default port that guacd should bind to, if no other port is explicitly specified.
 GUACD_DEFAULT_BIND_PORT = 4822
 
+# The maximum number of characters per instruction.
+GUAC_INSTRUCTION_MAX_LENGTH = 8192
+
 # Directory for *.so library files
 GUACD_LIB_DIR = join(dirname(__file__), 'libguac')
 

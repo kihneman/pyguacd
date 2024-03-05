@@ -1,15 +1,16 @@
 import asyncio
-from ctypes import cast, c_char_p, c_int
+from ctypes import cast, create_string_buffer, c_char_p, c_int
 from typing import Optional
 
 import zmq
 
 from . import libguac_wrapper
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_ID_PREFIX, GUACD_USEC_TIMEOUT, GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND
+    GuacClientLogLevel, GuacStatus,
+    GUAC_CLIENT_ID_PREFIX, GUAC_INSTRUCTION_MAX_LENGTH, GUACD_USEC_TIMEOUT, GUAC_PROTOCOL_STATUS_RESOURCE_NOT_FOUND
 )
 from .libguac_wrapper import (
-    guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_protocol_send_error,
+    guac_parser_alloc, guac_parser_expect, guac_parser_free, guac_parser_shift, guac_protocol_send_error,
     guac_socket_create_zmq, guac_socket, guac_socket_free, POINTER, String
 )
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
@@ -99,6 +100,14 @@ def parse_identifier(guac_sock: POINTER(guac_socket)) -> Optional[str]:
     else:
         # Get Python string from libguac parsed value
         identifier = bytes(cast(parser.argv[0], c_char_p).value).decode()
+
+    # Check remaining data in parser buffer
+    buf = create_string_buffer(GUAC_INSTRUCTION_MAX_LENGTH)
+    buf_ptr = cast(buf, POINTER(None))
+    while length := guac_parser_shift(parser_ptr, buf_ptr, c_int(GUAC_INSTRUCTION_MAX_LENGTH)) > 0:
+        guacd_log(
+            GuacClientLogLevel.GUAC_LOG_INFO, f'********* Found remaining data size {length} in parser: "{buf.value}"'
+        )
 
     # Close parser
     guac_parser_free(parser_ptr)
