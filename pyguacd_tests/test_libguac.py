@@ -1,13 +1,14 @@
 import ctypes
 from ctypes import POINTER, c_char, c_int, c_size_t
 from pathlib import Path
+from time import sleep
 
 import pytest
 import zmq
 from zmq.utils.monitor import parse_monitor_message
 
 from pyguacd.libguac_wrapper import (
-    String, Structure, guac_socket_create_zmq, guac_socket_free, guac_socket_read, pthread_mutex_t, zsock_t
+    String, Structure, guac_socket, guac_socket_create_zmq, guac_socket_free, guac_socket_read, pthread_mutex_t, zsock_t
 )
 
 
@@ -52,15 +53,15 @@ def socket_pair_with_monitor(request, tmp_path):
     pyzmq_monitor = pyzmq_sock.get_monitor_socket()
 
     if guac_sock_bind:
-        guac_sock = guac_socket_create_zmq(zmq.PAIR, ipc_address, guac_sock_bind)
+        guac_sock_ptr: POINTER(guac_socket) = guac_socket_create_zmq(zmq.PAIR, ipc_address, guac_sock_bind)
         pyzmq_sock.connect(ipc_address)
     else:
         pyzmq_sock.bind(ipc_address)
-        guac_sock = guac_socket_create_zmq(zmq.PAIR, ipc_address, guac_sock_bind)
+        guac_sock_ptr: POINTER(guac_socket) = guac_socket_create_zmq(zmq.PAIR, ipc_address, guac_sock_bind)
 
-    yield ipc_file, guac_sock_bind, guac_sock, pyzmq_sock, pyzmq_monitor
+    yield ipc_file, guac_sock_bind, guac_sock_ptr, pyzmq_sock, pyzmq_monitor
 
-    guac_socket_free(guac_sock)
+    guac_socket_free(guac_sock_ptr)
     ctx.destroy()
 
 
@@ -80,7 +81,7 @@ def test_guac_socket_create_zmq(tmp_path, serverish):
 
 def test_zmq_guac_socket_connect(socket_pair_with_monitor):
     # Setup
-    ipc_file, guac_sock_bind, guac_sock, pyzmq_sock, pyzmq_monitor = socket_pair_with_monitor
+    ipc_file, guac_sock_bind, guac_sock_ptr, pyzmq_sock, pyzmq_monitor = socket_pair_with_monitor
     if guac_sock_bind:
         # Events for pyzmq connect to guac_sock bind
         expect_events = [zmq.Event.CONNECTED]
@@ -97,3 +98,38 @@ def test_zmq_guac_socket_connect(socket_pair_with_monitor):
             pytest.fail(f'Expected event "{expect_event.name}", but no event received')
         else:
             assert mon_msg.get('event') == expect_event
+
+
+@pytest.mark.parametrize('read_count_offset', [-2, -1, 0, 1, 2])
+def test_guac_socket_read_simple(socket_pair_with_monitor, read_count_offset):
+    # Setup
+    ipc_file, guac_sock_bind, guac_sock_ptr, pyzmq_sock, pyzmq_monitor = socket_pair_with_monitor
+    guac_sock_data_ptr = ctypes.cast(guac_sock_ptr.contents.data, POINTER(guac_socket_zmq_data))
+    guac_sock_data = guac_sock_data_ptr.contents
+    expect_zmq_data_size = c_size_t(-read_count_offset if read_count_offset < 0 else 0)
+    test_msg = b'test-guac-socket-read-simple'
+
+    # Setup counts
+    buf_len = len(test_msg) + 2
+    read_count = len(test_msg) + read_count_offset
+    expect_read_count = read_count if read_count_offset < 0 else len(test_msg)
+    hyphens_after_read = (buf_len - expect_read_count) * b'-'
+
+    # Setup buf
+    buf = ctypes.create_string_buffer(b'-' * buf_len)
+    buf_ptr = ctypes.cast(buf, POINTER(None))
+
+    # Send message and give 1ms to finish
+    pyzmq_sock.send(test_msg)
+    sleep(.001)
+
+    # Read
+    guac_sock_read_count = guac_socket_read(guac_sock_ptr, buf_ptr, c_size_t(read_count))
+
+    # Test
+    assert guac_sock_read_count == expect_read_count
+    assert buf.value == test_msg[:expect_read_count] + hyphens_after_read
+
+    # TODO: Add test of zmq_msg, zmq_data_ptr
+    # TODO: Fix test of zmq_data_size
+    # assert guac_sock_data.zmq_data_size == expect_zmq_data_size
