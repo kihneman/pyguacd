@@ -58,6 +58,11 @@ class UserConnection:
             handle_tcp_to_zmq(self.tcp_reader, self.parse_id_socket, self.parse_id_input)
         )
 
+    def stop_parse_id_socket(self):
+        for conn_task in [self.zmq_to_tcp_task, self.tcp_to_zmq_task]:
+            if not conn_task.done():
+                conn_task.cancel()
+
     def start_handler_socket(self):
         self.handler_socket = self.ctx.socket(zmq.PAIR)
         self.handler_addr = new_ipc_addr(self.tmp_dir)
@@ -66,10 +71,10 @@ class UserConnection:
 
         # Start handlers for parse id socket
         self.zmq_to_tcp_task = create_task(
-            handle_zmq_to_tcp(self.handler_socket, self.tcp_writer)
+            handle_zmq_to_tcp(self.handler_socket, self.tcp_writer, self.parse_id_output)
         )
         self.tcp_to_zmq_task = create_task(
-            handle_tcp_to_zmq(self.tcp_reader, self.handler_socket)
+            handle_tcp_to_zmq(self.tcp_reader, self.handler_socket, self.parse_id_input)
         )
 
 
@@ -91,6 +96,7 @@ async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.So
         if keep:
             if (i := i + 1) > 5:
                 keep = False
+            print(f'in: {data}')
             keep_last.append(data)
 
         if len(data) == 0:
@@ -117,6 +123,7 @@ async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWr
         if keep:
             if (i := i + 1) > 5:
                 keep = False
+            print(f'out: {data[:100]}')
             keep_last.append(data)
 
         if len(data) == 0:
@@ -140,10 +147,12 @@ async def monitor_zmq_socket(conn: UserConnection):
     # Wait for connect and disconnect from libguac guac_parser_expect for parsing identifier
     if (error_msg := await check_zmq_monitor_events(conn.parse_id_monitor, zmq_events)) is None:
 
+        conn.stop_parse_id_socket()
         print(f'Finished parsing id\ninput:\n{conn.parse_id_input}\noutput:\n{conn.parse_id_output}\n\n')
+        conn.start_handler_socket()
 
         # Wait for connect and disconnect by libguac guac_user_handle_connection for handling remainder of connection
-        if (error_msg := await check_zmq_monitor_events(conn.parse_id_monitor, zmq_events)) is not None:
+        if (error_msg := await check_zmq_monitor_events(conn.handler_monitor, zmq_events)) is not None:
             guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, 'Exiting prematurely during handling of connection')
 
     else:
