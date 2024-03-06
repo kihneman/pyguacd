@@ -138,7 +138,7 @@ class TcpHandler:
             # Wait for ZeroMQ socket disconnect and guacd_route_connection to finish
             await asyncio.wait([
                 create_task(monitor_zmq_socket(zmq_user_monitor, connection_tasks)),
-                create_task(guacd_route_connection(self.proc_map, zmq_user_addr, tmp_dir)),
+                create_task(guacd_route_connection(self.proc_map, zmq_user_addr, zmq_user_addr, tmp_dir)),
             ])
 
 
