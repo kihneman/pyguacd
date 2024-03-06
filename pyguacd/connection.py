@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 from ctypes import cast, create_string_buffer, c_char_p, c_int
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import zmq
 
@@ -15,6 +17,9 @@ from .libguac_wrapper import (
 )
 from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .proc import guacd_create_proc, GuacdProc, GuacdProcMap
+
+if TYPE_CHECKING:
+    from .daemon import UserConnection
 
 
 def get_client_proc(proc_map: GuacdProcMap, parse_conn_id_addr: str, tmp_dir: str) -> Optional[GuacdProc]:
@@ -133,7 +138,7 @@ async def wait_for_process_cleanup(proc_map: GuacdProcMap, proc: GuacdProc):
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" does not exist for removal.')
 
 
-async def guacd_route_connection(proc_map: GuacdProcMap, parse_conn_id_addr: str, zmq_addr: str, tmp_dir: str) -> int:
+async def guacd_route_connection(proc_map: GuacdProcMap, conn: UserConnection) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -144,20 +149,17 @@ async def guacd_route_connection(proc_map: GuacdProcMap, parse_conn_id_addr: str
     :param proc_map:
         The map of existing client processes.
 
-    :param parse_conn_id_addr:
-        ZeroMQ address to create a new guac_socket for parsing the connection id or protocol of the user
-
-    :param zmq_addr:
-        ZeroMQ address to create a new guac_socket for the user connection
-
-    :param tmp_dir:
-        Temporary directory for securely storing socket files
+    :param conn:
+        Object with sockets and data for user connection
 
     :return:
         Zero if the connection was successfully routed, non-zero if routing has failed.
     """
 
-    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, parse_conn_id_addr, tmp_dir)
+    proc: Optional[GuacdProc] = await asyncio.to_thread(
+        get_client_proc, proc_map, conn.zmq_parse_id.address, conn.tmp_dir
+    )
+    conn.activate_user_handler()
 
     # Abort if no process exists for the requested connection
     if proc is None:
@@ -173,6 +175,6 @@ async def guacd_route_connection(proc_map: GuacdProcMap, parse_conn_id_addr: str
         proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, proc))
 
     # Add new user (in the case of a new process, this will be the owner)
-    await proc.send_user_socket_addr(zmq_addr)
+    await proc.send_user_socket_addr(conn.zmq_user_handler.address)
 
     return 0
