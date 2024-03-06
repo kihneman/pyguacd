@@ -17,7 +17,7 @@ from .log import guacd_log, guacd_log_guac_error, guacd_log_handshake_failure
 from .proc import guacd_create_proc, GuacdProc, GuacdProcMap
 
 
-def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir: str) -> Optional[GuacdProc]:
+def get_client_proc(proc_map: GuacdProcMap, parse_conn_id_addr: str, tmp_dir: str) -> Optional[GuacdProc]:
     """Get or create the client process and return corresponding GuacdProc if successful
 
     :param proc_map:
@@ -34,7 +34,7 @@ def get_client_proc(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir: str) -> Opti
     """
 
     # Open a ZeroMQ guac_socket and parse identifier
-    guac_sock = guac_socket_create_zmq(zmq.PAIR, zmq_addr, False)
+    guac_sock = guac_socket_create_zmq(zmq.PAIR, parse_conn_id_addr, False)
     identifier = parse_identifier(guac_sock)
 
     if identifier is None:
@@ -133,7 +133,7 @@ async def wait_for_process_cleanup(proc_map: GuacdProcMap, proc: GuacdProc):
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection "{proc.connection_id}" does not exist for removal.')
 
 
-async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir: str) -> int:
+async def guacd_route_connection(proc_map: GuacdProcMap, parse_conn_id_addr: str, zmq_addr: str, tmp_dir: str) -> int:
     """Route a Guacamole connection
 
     Routes the connection on the given socket according to the Guacamole
@@ -143,6 +143,9 @@ async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir:
 
     :param proc_map:
         The map of existing client processes.
+
+    :param parse_conn_id_addr:
+        ZeroMQ address to create a new guac_socket for parsing the connection id or protocol of the user
 
     :param zmq_addr:
         ZeroMQ address to create a new guac_socket for the user connection
@@ -154,7 +157,7 @@ async def guacd_route_connection(proc_map: GuacdProcMap, zmq_addr: str, tmp_dir:
         Zero if the connection was successfully routed, non-zero if routing has failed.
     """
 
-    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, zmq_addr, tmp_dir)
+    proc: Optional[GuacdProc] = await asyncio.to_thread(get_client_proc, proc_map, parse_conn_id_addr, tmp_dir)
 
     # Abort if no process exists for the requested connection
     if proc is None:

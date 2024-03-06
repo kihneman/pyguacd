@@ -1,8 +1,9 @@
 import asyncio
 from argparse import ArgumentParser
 from asyncio import create_task, StreamReader, StreamWriter, Task
+from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import Iterable
+from typing import Iterable, List, Optional
 
 import zmq
 import zmq.asyncio
@@ -18,34 +19,100 @@ from .utils.zmq_monitor import check_zmq_monitor_events
 DATA_CHUNK_SIZE = 2 ** 10  # 1kB data chunk
 
 
-async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket):
+@dataclass
+class UserConnection:
+    # External TCP connection reader and writer
+    tcp_reader: StreamReader
+    tcp_writer: StreamWriter
+    ctx: zmq.asyncio.Context
+    tmp_dir: str
+
+    # Internal ZeroMQ socket data used for parsing connection id / protocol when the connection starts
+    parse_id_addr: Optional[str] = None
+    parse_id_socket: Optional[zmq.asyncio.Socket] = None
+    parse_id_monitor: Optional[zmq.asyncio.Socket] = None
+    parse_id_input: List = field(default_factory=list)
+    parse_id_output: List = field(default_factory=list)
+
+    # Internal ZeroMQ socket data used for handling the user connection
+    handler_addr: Optional[str] = None
+    handler_socket: Optional[zmq.asyncio.Socket] = None
+    handler_monitor: Optional[zmq.asyncio.Socket] = None
+
+    # Asyncio tasks for transferring data between external tcp socket and internal ZeroMQ sockets
+    tcp_to_zmq_task: Optional[asyncio.Task] = None
+    zmq_to_tcp_task: Optional[asyncio.Task] = None
+
+    def __post_init__(self):
+        # Start parse id socket immediately for parsing connection id / protocol
+        self.parse_id_socket = self.ctx.socket(zmq.PAIR)
+        self.parse_id_addr = new_ipc_addr(self.tmp_dir)
+        self.parse_id_socket.bind(self.parse_id_addr)
+        self.parse_id_monitor = self.parse_id_socket.get_monitor_socket()
+
+        # Start handlers for parse id socket
+        self.tcp_to_zmq_task = create_task(
+            handle_tcp_to_zmq(self.tcp_reader, self.parse_id_socket, self.parse_id_input)
+        )
+        self.zmq_to_tcp_task = create_task(
+            handle_zmq_to_tcp(self.parse_id_socket, self.tcp_writer, self.parse_id_output)
+        )
+
+    def start_handler_socket(self):
+        self.handler_socket = self.ctx.socket(zmq.PAIR)
+        self.handler_addr = new_ipc_addr(self.tmp_dir)
+        self.handler_socket.bind(self.handler_addr)
+        self.handler_monitor = self.handler_socket.get_monitor_socket()
+
+        # Start handlers for parse id socket
+        self.tcp_to_zmq_task = create_task(
+            handle_tcp_to_zmq(self.tcp_reader, self.handler_socket)
+        )
+        self.zmq_to_tcp_task = create_task(
+            handle_zmq_to_tcp(self.handler_socket, self.tcp_writer)
+        )
+
+
+async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket, keep_last: Optional[List] = None):
     """Read data chunk from tcp socket and write to ZeroMQ socket
 
     :param tcp_reader:
         TCP connection read stream provided by asyncio.start_server()
     :param zmq_socket:
         ZeroMQ socket that will be routed in guacd_route_connection()
+    :param keep_last:
+        Keep last messages
     """
 
+    keep = isinstance(keep_last, list)
     while True:
         data = await tcp_reader.read(DATA_CHUNK_SIZE)
+        if keep:
+            keep_last.append(data)
+
         if len(data) == 0:
             break
 
         await zmq_socket.send(data)
 
 
-async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter):
+async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter, keep_last: Optional[List] = None):
     """Read from ZeroMQ socket and write to TCP socket
 
     :param zmq_socket:
         ZeroMQ socket that will be routed in guacd_route_connection()
     :param tcp_writer:
         TCP connection write stream provided by asyncio.start_server()
+    :param keep_last:
+        Keep last messages
     """
 
+    keep = isinstance(keep_last, list)
     while True:
         data = await zmq_socket.recv()
+        if keep:
+            keep_last.append(data)
+
         if len(data) == 0:
             break
 
@@ -53,14 +120,11 @@ async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWr
         await tcp_writer.drain()
 
 
-async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_tasks: Iterable[Task]):
+async def monitor_zmq_socket(conn: UserConnection):
     """Wait for ZeroMQ socket to finish before canceling read and write handlers
 
-    :param zmq_monitor_socket:
-        ZeroMQ socket provided by get_monitor_socket method of another ZeroMQ Socket object
-    :param connection_tasks:
-        Iterable of connection tasks to cancel after ZeroMQ socket disconnect.
-        The connection tasks are the read and write handlers.
+    :param conn:
+        Class with connection data and sockets
     """
 
     # These are the events that occur on successful connect and disconnect
@@ -68,17 +132,22 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_
     zmq_events = [zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
 
     # Wait for connect and disconnect from libguac guac_parser_expect for parsing identifier
-    if (error_msg := await check_zmq_monitor_events(zmq_monitor_socket, zmq_events)) is None:
+    if (error_msg := await check_zmq_monitor_events(conn.parse_id_monitor, zmq_events)) is None:
+        for conn_task in [conn.zmq_to_tcp_task, conn.tcp_to_zmq_task]:
+            if not conn_task.done():
+                conn_task.cancel()
+
+        print(f'Finished parsing id')
+        conn.start_handler_socket()
 
         # Wait for connect and disconnect by libguac guac_user_handle_connection for handling remainder of connection
-        if (error_msg := await check_zmq_monitor_events(zmq_monitor_socket, zmq_events)) is not None:
+        if (error_msg := await check_zmq_monitor_events(conn.handler_monitor, zmq_events)) is not None:
             guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, 'Exiting prematurely during handling of connection')
-
     else:
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, 'Exiting prematurely during parsing of identifier')
 
     # Cancel connection handles to prevent waiting to read forever on closed socket
-    for conn_task in connection_tasks:
+    for conn_task in [conn.zmq_to_tcp_task, conn.tcp_to_zmq_task]:
         if not conn_task.done():
             conn_task.cancel()
             await conn_task
@@ -122,23 +191,14 @@ class TcpHandler:
             # Create and bind Zero MQ socket. Two connections are made to this socket from libguac by:
             # - guac_parser_expect in connection.py for parsing identifier
             # - guac_user_handle_connection in proc.py for handling connection
-            zmq_user_socket = ctx.socket(zmq.PAIR)
-            zmq_user_addr = new_ipc_addr(tmp_dir)
-            zmq_user_socket.bind(zmq_user_addr)
-
-            # Create monitor socket for the above user socket
-            zmq_user_monitor = zmq_user_socket.get_monitor_socket()
-
-            # Tasks used to proxy TCP connection to ZeroMQ socket
-            connection_tasks = [
-                create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
-                create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
-            ]
+            conn = UserConnection(tcp_reader, tcp_writer, ctx, tmp_dir)
 
             # Wait for ZeroMQ socket disconnect and guacd_route_connection to finish
             await asyncio.wait([
-                create_task(monitor_zmq_socket(zmq_user_monitor, connection_tasks)),
-                create_task(guacd_route_connection(self.proc_map, zmq_user_addr, tmp_dir)),
+                create_task(monitor_zmq_socket(conn)),
+                create_task(
+                    guacd_route_connection(self.proc_map, conn.parse_id_addr, conn.handler_addr, conn.tmp_dir)
+                ),
             ])
 
 
