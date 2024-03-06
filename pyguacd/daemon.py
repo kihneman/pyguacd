@@ -1,8 +1,9 @@
 import asyncio
 from argparse import ArgumentParser
 from asyncio import create_task, StreamReader, StreamWriter, Task
+from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import Iterable
+from typing import Iterable, List, Optional
 
 import zmq
 import zmq.asyncio
@@ -16,6 +17,60 @@ from .utils.zmq_monitor import check_zmq_monitor_events
 
 
 DATA_CHUNK_SIZE = 2 ** 10  # 1kB data chunk
+
+
+@dataclass
+class UserConnection:
+    # External TCP connection reader and writer
+    tcp_reader: StreamReader
+    tcp_writer: StreamWriter
+    ctx: zmq.asyncio.Context
+    tmp_dir: str
+
+    # Internal ZeroMQ socket data used for parsing connection id / protocol when the connection starts
+    parse_id_addr: Optional[str] = None
+    parse_id_socket: Optional[zmq.asyncio.Socket] = None
+    parse_id_monitor: Optional[zmq.asyncio.Socket] = None
+    parse_id_input: List = field(default_factory=list)
+    parse_id_output: List = field(default_factory=list)
+
+    # Internal ZeroMQ socket data used for handling the user connection
+    handler_addr: Optional[str] = None
+    handler_socket: Optional[zmq.asyncio.Socket] = None
+    handler_monitor: Optional[zmq.asyncio.Socket] = None
+
+    # Asyncio tasks for transferring data between external tcp socket and internal ZeroMQ sockets
+    tcp_to_zmq_task: Optional[asyncio.Task] = None
+    zmq_to_tcp_task: Optional[asyncio.Task] = None
+
+    def __post_init__(self):
+        # Start parse id socket immediately for parsing connection id / protocol
+        self.parse_id_socket = self.ctx.socket(zmq.PAIR)
+        self.parse_id_addr = new_ipc_addr(self.tmp_dir)
+        self.parse_id_socket.bind(self.parse_id_addr)
+        self.parse_id_monitor = self.parse_id_socket.get_monitor_socket()
+
+        # Start handlers for parse id socket
+        self.zmq_to_tcp_task = create_task(
+            handle_zmq_to_tcp(self.parse_id_socket, self.tcp_writer)  # , self.parse_id_output)
+        )
+        self.tcp_to_zmq_task = create_task(
+            handle_tcp_to_zmq(self.tcp_reader, self.parse_id_socket)  # , self.parse_id_input)
+        )
+
+    def start_handler_socket(self):
+        self.handler_socket = self.ctx.socket(zmq.PAIR)
+        self.handler_addr = new_ipc_addr(self.tmp_dir)
+        self.handler_socket.bind(self.handler_addr)
+        self.handler_monitor = self.handler_socket.get_monitor_socket()
+
+        # Start handlers for parse id socket
+        self.zmq_to_tcp_task = create_task(
+            handle_zmq_to_tcp(self.handler_socket, self.tcp_writer)
+        )
+        self.tcp_to_zmq_task = create_task(
+            handle_tcp_to_zmq(self.tcp_reader, self.handler_socket)
+        )
 
 
 async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket):
@@ -122,23 +177,25 @@ class TcpHandler:
             # Create and bind Zero MQ socket. Two connections are made to this socket from libguac by:
             # - guac_parser_expect in connection.py for parsing identifier
             # - guac_user_handle_connection in proc.py for handling connection
-            zmq_user_socket = ctx.socket(zmq.PAIR)
-            zmq_user_addr = new_ipc_addr(tmp_dir)
-            zmq_user_socket.bind(zmq_user_addr)
+            # zmq_user_socket = ctx.socket(zmq.PAIR)
+            # zmq_user_addr = new_ipc_addr(tmp_dir)
+            # zmq_user_socket.bind(zmq_user_addr)
 
             # Create monitor socket for the above user socket
-            zmq_user_monitor = zmq_user_socket.get_monitor_socket()
+            # zmq_user_monitor = zmq_user_socket.get_monitor_socket()
 
             # Tasks used to proxy TCP connection to ZeroMQ socket
-            connection_tasks = [
-                create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
-                create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
-            ]
+            # connection_tasks = [
+            #     create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
+            #     create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
+            # ]
+            conn = UserConnection(tcp_reader, tcp_writer, ctx, tmp_dir)
 
+            connection_tasks = [conn.zmq_to_tcp_task, conn.tcp_to_zmq_task]
             # Wait for ZeroMQ socket disconnect and guacd_route_connection to finish
             await asyncio.wait([
-                create_task(monitor_zmq_socket(zmq_user_monitor, connection_tasks)),
-                create_task(guacd_route_connection(self.proc_map, zmq_user_addr, zmq_user_addr, tmp_dir)),
+                create_task(monitor_zmq_socket(conn.parse_id_monitor, connection_tasks)),
+                create_task(guacd_route_connection(self.proc_map, conn.parse_id_addr, conn.parse_id_addr, tmp_dir)),
             ])
 
 
