@@ -126,14 +126,11 @@ async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWr
         await tcp_writer.drain()
 
 
-async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_tasks: Iterable[Task]):
+async def monitor_zmq_socket(conn: UserConnection):
     """Wait for ZeroMQ socket to finish before canceling read and write handlers
 
-    :param zmq_monitor_socket:
-        ZeroMQ socket provided by get_monitor_socket method of another ZeroMQ Socket object
-    :param connection_tasks:
-        Iterable of connection tasks to cancel after ZeroMQ socket disconnect.
-        The connection tasks are the read and write handlers.
+    :param conn:
+        Class with connection data and sockets
     """
 
     # These are the events that occur on successful connect and disconnect
@@ -141,17 +138,19 @@ async def monitor_zmq_socket(zmq_monitor_socket: zmq.asyncio.Socket, connection_
     zmq_events = [zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
 
     # Wait for connect and disconnect from libguac guac_parser_expect for parsing identifier
-    if (error_msg := await check_zmq_monitor_events(zmq_monitor_socket, zmq_events)) is None:
+    if (error_msg := await check_zmq_monitor_events(conn.parse_id_monitor, zmq_events)) is None:
+
+        print(f'Finished parsing id\ninput:\n{conn.parse_id_input}\noutput:\n{conn.parse_id_output}\n\n')
 
         # Wait for connect and disconnect by libguac guac_user_handle_connection for handling remainder of connection
-        if (error_msg := await check_zmq_monitor_events(zmq_monitor_socket, zmq_events)) is not None:
+        if (error_msg := await check_zmq_monitor_events(conn.parse_id_monitor, zmq_events)) is not None:
             guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, 'Exiting prematurely during handling of connection')
 
     else:
         guacd_log(GuacClientLogLevel.GUAC_LOG_ERROR, 'Exiting prematurely during parsing of identifier')
 
     # Cancel connection handles to prevent waiting to read forever on closed socket
-    for conn_task in connection_tasks:
+    for conn_task in [conn.zmq_to_tcp_task, conn.tcp_to_zmq_task]:
         if not conn_task.done():
             conn_task.cancel()
             await conn_task
@@ -195,24 +194,12 @@ class TcpHandler:
             # Create and bind Zero MQ socket. Two connections are made to this socket from libguac by:
             # - guac_parser_expect in connection.py for parsing identifier
             # - guac_user_handle_connection in proc.py for handling connection
-            # zmq_user_socket = ctx.socket(zmq.PAIR)
-            # zmq_user_addr = new_ipc_addr(tmp_dir)
-            # zmq_user_socket.bind(zmq_user_addr)
 
-            # Create monitor socket for the above user socket
-            # zmq_user_monitor = zmq_user_socket.get_monitor_socket()
-
-            # Tasks used to proxy TCP connection to ZeroMQ socket
-            # connection_tasks = [
-            #     create_task(handle_zmq_to_tcp(zmq_user_socket, tcp_writer)),
-            #     create_task(handle_tcp_to_zmq(tcp_reader, zmq_user_socket)),
-            # ]
             conn = UserConnection(tcp_reader, tcp_writer, ctx, tmp_dir)
 
-            connection_tasks = [conn.zmq_to_tcp_task, conn.tcp_to_zmq_task]
             # Wait for ZeroMQ socket disconnect and guacd_route_connection to finish
             await asyncio.wait([
-                create_task(monitor_zmq_socket(conn.parse_id_monitor, connection_tasks)),
+                create_task(monitor_zmq_socket(conn)),
                 create_task(guacd_route_connection(self.proc_map, conn.parse_id_addr, conn.parse_id_addr, tmp_dir)),
             ])
 
