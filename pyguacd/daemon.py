@@ -52,10 +52,10 @@ class UserConnection:
 
         # Start handlers for parse id socket
         self.zmq_to_tcp_task = create_task(
-            handle_zmq_to_tcp(self.parse_id_socket, self.tcp_writer)  # , self.parse_id_output)
+            handle_zmq_to_tcp(self.parse_id_socket, self.tcp_writer, self.parse_id_output)
         )
         self.tcp_to_zmq_task = create_task(
-            handle_tcp_to_zmq(self.tcp_reader, self.parse_id_socket)  # , self.parse_id_input)
+            handle_tcp_to_zmq(self.tcp_reader, self.parse_id_socket, self.parse_id_input)
         )
 
     def start_handler_socket(self):
@@ -73,34 +73,52 @@ class UserConnection:
         )
 
 
-async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket):
+async def handle_tcp_to_zmq(tcp_reader: StreamReader, zmq_socket: zmq.asyncio.Socket, keep_last: Optional[List] = None):
     """Read data chunk from tcp socket and write to ZeroMQ socket
 
     :param tcp_reader:
         TCP connection read stream provided by asyncio.start_server()
     :param zmq_socket:
         ZeroMQ socket that will be routed in guacd_route_connection()
+    :param keep_last:
+        Keep last messages
     """
 
+    i = 0
+    keep = isinstance(keep_last, list)
     while True:
         data = await tcp_reader.read(DATA_CHUNK_SIZE)
+        if keep:
+            if (i := i + 1) > 5:
+                keep = False
+            keep_last.append(data)
+
         if len(data) == 0:
             break
 
         await zmq_socket.send(data)
 
 
-async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter):
+async def handle_zmq_to_tcp(zmq_socket: zmq.asyncio.Socket, tcp_writer: StreamWriter, keep_last: Optional[List] = None):
     """Read from ZeroMQ socket and write to TCP socket
 
     :param zmq_socket:
         ZeroMQ socket that will be routed in guacd_route_connection()
     :param tcp_writer:
         TCP connection write stream provided by asyncio.start_server()
+    :param keep_last:
+        Keep last messages
     """
 
+    i = 0
+    keep = isinstance(keep_last, list)
     while True:
         data = await zmq_socket.recv()
+        if keep:
+            if (i := i + 1) > 5:
+                keep = False
+            keep_last.append(data)
+
         if len(data) == 0:
             break
 
