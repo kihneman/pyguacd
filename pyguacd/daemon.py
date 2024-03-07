@@ -17,6 +17,7 @@ from .utils.zmq_monitor import check_zmq_monitor_events
 
 
 DATA_CHUNK_SIZE = 2 ** 10  # 1kB data chunk
+DEBUG_TRAFFIC_LEN = 0
 
 
 @dataclass
@@ -36,7 +37,7 @@ class ZmqSocketToTCP:
         self.socket = self.ctx.socket(zmq.PAIR)
         self.socket.bind(self.address)
         self.monitor = self.socket.get_monitor_socket()
-        self.task = create_task(self.tcp_write_handler(True))
+        self.task = create_task(self.tcp_write_handler())
 
     async def monitor_connection(self):
         # These are the events that occur on successful connect and disconnect
@@ -48,14 +49,11 @@ class ZmqSocketToTCP:
                 GuacClientLogLevel.GUAC_LOG_ERROR, f'Exiting prematurely during handling of connection: {error_msg}'
             )
 
-    async def tcp_write_handler(self, debug: bool = False):
-        i = 0
+    async def tcp_write_handler(self):
         while True:
             data = await self.socket.recv()
-            if debug:
-                if (i := i + 1) > 5:
-                    debug = False
-                print(f'in: {data[:100]}')
+            if DEBUG_TRAFFIC_LEN:
+                print(f'in: {data[:DEBUG_TRAFFIC_LEN]}')
             if len(data) == 0:
                 break
 
@@ -91,7 +89,7 @@ class UserConnection:
         self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir)
         self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir)
         self.active_zmq_socket = self.zmq_parse_id.socket
-        self.tcp_to_zmq_task = create_task(self.handle_tcp_to_zmq(True))
+        self.tcp_to_zmq_task = create_task(self.handle_tcp_to_zmq())
         self.monitor_user_handler = create_task(self.zmq_user_handler.monitor_connection())
 
     def activate_user_handler(self):
@@ -106,20 +104,17 @@ class UserConnection:
     def start_socket(self, socket):
         socket = self.ctx.socket(zmq.PAIR)
 
-    async def handle_tcp_to_zmq(self, debug: bool = False):
+    async def handle_tcp_to_zmq(self):
         """Read data chunk from tcp socket and write to ZeroMQ socket
 
         :param debug:
             Keep last messages
         """
 
-        i = 0
         while True:
             data = await self.tcp_reader.read(DATA_CHUNK_SIZE)
-            if debug:
-                if (i := i + 1) > 5:
-                    debug = False
-                print(f'in: {data}')
+            if DEBUG_TRAFFIC_LEN:
+                print(f'in: {data[:DEBUG_TRAFFIC_LEN]}')
 
             if len(data) == 0:
                 break
