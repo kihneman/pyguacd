@@ -332,7 +332,7 @@ def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
 
     # Associate new client
     proc = GuacdProc(guac_client_alloc(), tmp_dir)
-    proc.client_ptr.contents.log_handler = log_handler
+    # proc.client_ptr.contents.log_handler = log_handler
 
     proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
     proc.process.start()
