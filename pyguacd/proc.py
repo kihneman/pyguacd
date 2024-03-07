@@ -16,7 +16,7 @@ from .constants import (
 )
 from .libguac_wrapper import (
     guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_log_handler, guac_client_stop,
-    guac_socket_create_zmq, guac_socket_require_keep_alive,
+    guac_socket_create_zmq, guac_socket_free, guac_socket_require_keep_alive,
     guac_user_alloc, guac_user_free, guac_user_handle_connection, String
 )
 from .log import guacd_log, guacd_log_guac_error
@@ -201,6 +201,7 @@ def guacd_user_thread(client_ptr: POINTER(guac_client), owner: int, user_socket_
     guac_user_handle_connection(user_ptr, c_int(GUACD_USEC_TIMEOUT))
 
     # Clean up
+    guac_socket_free(user.socket)
     guac_user_free(user_ptr)
 
     # Stop client and prevent future users if all users are disconnected
