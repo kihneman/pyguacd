@@ -2,7 +2,7 @@ import asyncio
 import multiprocessing
 import threading
 from asyncio.exceptions import CancelledError
-from ctypes import c_int, POINTER
+from ctypes import CDLL, POINTER, cast, c_char_p, c_int, c_size_t, c_void_p, create_string_buffer, pointer
 from dataclasses import dataclass
 from multiprocessing import Process
 from typing import Callable, Dict, Optional
@@ -15,9 +15,9 @@ from .constants import (
     GuacClientLogLevel, GuacStatus, GUAC_CLIENT_PROC_START_TIMEOUT, GUACD_USEC_TIMEOUT
 )
 from .libguac_wrapper import (
-    guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_stop,
+    guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_log_handler, guac_client_stop,
     guac_socket_create_zmq, guac_socket_require_keep_alive,
-    guac_user_alloc, guac_user_free, guac_user_handle_connection
+    guac_user_alloc, guac_user_free, guac_user_handle_connection, String
 )
 from .log import guacd_log, guacd_log_guac_error
 from .utils.ipc_addr import new_ipc_addr
@@ -303,6 +303,19 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str):
     cleanup_client(client_ptr)
 
 
+MESSAGE_LEN = 2048
+libc = CDLL("libc.so.6")
+vsnprintf = libc.vsnprintf
+vsnprintf.restype = c_int
+
+
+@guac_client_log_handler
+def log_handler(guac_client_ptr: POINTER(guac_client), log_level: c_int, msg: String, args: c_void_p):
+    message = create_string_buffer(MESSAGE_LEN)
+    vsnprintf(message, c_size_t(MESSAGE_LEN), msg.raw, cast(args, c_void_p))
+    guacd_log(GuacClientLogLevel(log_level), str(String(message)))
+
+
 def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
     """Creates new guacd client process and returns with process info
 
@@ -318,6 +331,7 @@ def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
 
     # Associate new client
     proc = GuacdProc(guac_client_alloc(), tmp_dir)
+    proc.client_ptr.contents.log_handler = log_handler
 
     proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
     proc.process.start()
