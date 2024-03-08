@@ -16,7 +16,7 @@ from .utils.ipc_addr import new_ipc_addr
 from .utils.zmq_monitor import check_zmq_monitor_events
 
 
-DATA_CHUNK_SIZE = 2 ** 10  # 1kB data chunk
+DATA_CHUNK_SIZE = 2 ** 13  # 1kB data chunk
 DEBUG_TRAFFIC_LEN = 0
 
 
