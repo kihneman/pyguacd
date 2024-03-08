@@ -17,7 +17,6 @@ from .utils.zmq_monitor import check_zmq_monitor_events
 
 
 DATA_CHUNK_SIZE = 2 ** 13  # 1kB data chunk
-DEBUG_TRAFFIC_LEN = 0
 
 
 @dataclass
@@ -52,8 +51,6 @@ class ZmqSocketToTCP:
     async def tcp_write_handler(self):
         while True:
             data = await self.socket.recv()
-            if DEBUG_TRAFFIC_LEN:
-                print(f'in: {data[:DEBUG_TRAFFIC_LEN]}')
             if len(data) == 0:
                 break
 
@@ -113,9 +110,6 @@ class UserConnection:
 
         while True:
             data = await self.tcp_reader.read(DATA_CHUNK_SIZE)
-            if DEBUG_TRAFFIC_LEN:
-                print(f'in: {data[:DEBUG_TRAFFIC_LEN]}')
-
             if len(data) == 0:
                 break
 
