@@ -164,7 +164,7 @@ async def guacd_route_connection(proc_map: GuacdProcMap, conn: UserConnection) -
     # Abort if no process exists for the requested connection
     if proc is None:
         guacd_log_guac_error(GuacClientLogLevel.GUAC_LOG_INFO, "Connection did not succeed")
-        return 1
+        return None
 
     # If new process was created, manage that process
     if proc_map.connect_new_process(proc):
@@ -177,4 +177,4 @@ async def guacd_route_connection(proc_map: GuacdProcMap, conn: UserConnection) -
     # Add new user (in the case of a new process, this will be the owner)
     await proc.send_user_socket_addr(conn.zmq_user_handler.address)
 
-    return 0
+    return proc.connection_id
