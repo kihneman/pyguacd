@@ -19,6 +19,8 @@ from enum import auto, IntEnum
 from os.path import dirname, expanduser, join
 
 
+DEBUG_READ_TIMESTAMP = b'ZMQ_DEBUG_LIBGUAC_READ_LATENCY'
+
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 GUACD_LOG_NAME = 'guacd'

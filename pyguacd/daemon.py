@@ -17,14 +17,14 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.shortcuts import ProgressBar, ProgressBarCounter
 
 from .connection import guacd_route_connection
-from .constants import GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT
+from .constants import DEBUG_READ_TIMESTAMP, GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT
 from .log import guacd_log
 from .proc import GuacdProcMap
 from .utils.ipc_addr import new_ipc_addr
 from .utils.zmq_monitor import check_zmq_monitor_events
 
 
-DATA_CHUNK_SIZE = 2 ** 13  # 1kB data chunk
+DATA_CHUNK_SIZE = 2 ** 15  # 32kB data chunk
 NSEC_PER_SEC = 10 ** 9
 
 
@@ -33,6 +33,7 @@ class ZmqSocketToTCP:
     """ZeroMQ socket with handler to write out to TCP stream"""
     ctx: zmq.asyncio.Context
     tcp_write_queue: asyncio.Queue
+    tcp_read_timer_queue: asyncio.Queue
     tmp_dir: str
 
     address: str = None
@@ -61,23 +62,41 @@ class ZmqSocketToTCP:
 
     async def zmq_read_handler(self):
         while True:
+            new_transfer = False
             try:
-                tv_sec, tv_nsec, data = await self.socket.recv_multipart(zmq.NOBLOCK)
-                self.total_size += len(data)
+                tv_sec, tv_nsec, *data_parts = await self.socket.recv_multipart(zmq.NOBLOCK)
             except zmq.ZMQError:
                 new_transfer = True
-                tv_sec, tv_nsec, data = await self.socket.recv_multipart()
-                self.total_size = len(data)
+                tv_sec, tv_nsec, *data_parts = await self.socket.recv_multipart()
 
-            zmq_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
-            send_usec = int.from_bytes(tv_sec, signed=True) * 1000000 + int.from_bytes(tv_nsec, signed=True) // 1000
-            if new_transfer:
-                self.start_MBs_usec = send_usec
-            #     start_MBs_usec = None
-            # else:
-            #     start_MBs_usec = self.start_MBs_usec
+            if len(data_parts) > 1:
+               # print(f'Got data parts {data_parts}')
+               # breakpoint()
+               tv_after_sec, tv_after_nsec, _, read_size = data_parts
+               tcp_read_usec, tcp_read_size = await self.tcp_read_timer_queue.get()
+               zmq_before_read_usec = int.from_bytes(tv_sec, signed=True) * 1000000 + int.from_bytes(tv_nsec, signed=True) // 1000
+               zmq_after_read_usec = int.from_bytes(tv_after_sec, signed=True) * 1000000 + int.from_bytes(tv_after_nsec, signed=True) // 1000
+               libguac_read_us = f'{zmq_after_read_usec - zmq_before_read_usec} usec'
+               total_read_us = f'{zmq_after_read_usec - tcp_read_usec} usec'
+               zmq_read_size = int.from_bytes(read_size)
+               mismatched = f'Mismatched {zmq_read_size}/' if tcp_read_size == zmq_read_size else 'Matched'
+               print(f'{mismatched} {tcp_read_size} bytes of data read by libguac in {libguac_read_us}, total {total_read_us}')
 
-            await self.tcp_write_queue.put((self.start_MBs_usec, self.total_size, send_usec, zmq_usec, data))
+            else:
+                zmq_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
+                send_usec = int.from_bytes(tv_sec, signed=True) * 1000000 + int.from_bytes(tv_nsec, signed=True) // 1000
+                data = data_parts[0]
+                if new_transfer:
+                    self.total_size = len(data)
+                    self.start_MBs_usec = send_usec
+                else:
+                    self.total_size += len(data)
+
+                #     start_MBs_usec = None
+                # else:
+                #     start_MBs_usec = self.start_MBs_usec
+
+                await self.tcp_write_queue.put((self.start_MBs_usec, self.total_size, send_usec, zmq_usec, data))
 
 
 @dataclass
@@ -89,6 +108,7 @@ class UserConnection:
     tmp_dir: str
 
     tcp_read_queue: asyncio.Queue = None
+    tcp_read_timer_queue: asyncio.Queue = None
     tcp_write_queue: asyncio.Queue = None
     test_queue: asyncio.Queue = None
 
@@ -110,12 +130,13 @@ class UserConnection:
     def __post_init__(self):
         # Init queues
         self.tcp_read_queue = asyncio.Queue(8)
+        self.tcp_read_timer_queue = asyncio.Queue(8)
         self.tcp_write_queue = asyncio.Queue(8)
         self.test_queue = asyncio.Queue(8)
 
         # Start parse id socket immediately for parsing connection id / protocol
-        self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tmp_dir)
-        self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tmp_dir)
+        self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tcp_read_timer_queue, self.tmp_dir)
+        self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tcp_read_timer_queue, self.tmp_dir)
         self.tcp_write_task = create_task(self.tcp_write_handler())
         self.active_zmq_socket = self.zmq_parse_id.socket
         self.zmq_write_task = create_task(self.zmq_write_handler())
@@ -144,22 +165,33 @@ class UserConnection:
             self.tcp_writer.write(data)
             await self.tcp_writer.drain()
             self.tcp_write_queue.task_done()
-            tcp_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
+            tcp_write_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
             zmq_out = f'ZMQ ({zmq_usec - send_usec} usec)'
-            tcp_out = f'TCP ({tcp_usec - zmq_usec} usec)'
-            total = f'total ({tcp_usec - send_usec} usec)'
-            size_out = f'{total_size} bytes in {tcp_usec - start_MBs_usec} usec'
+            tcp_out = f'TCP ({tcp_write_usec - zmq_usec} usec)'
+            total = f'total ({tcp_write_usec - send_usec} usec)'
+            size_out = f'{total_size} bytes in {tcp_write_usec - start_MBs_usec} usec'
+
             if start_MBs_usec:
-                throughput = total_size * 1000 / (tcp_usec - start_MBs_usec)
+                throughput = total_size * 1000 / (tcp_write_usec - start_MBs_usec)
                 throughput_out = f'; Output throughput: {throughput} KB/s'
             else:
                 throughput_out = ''
-            print(f'Output latency: {zmq_out}, {tcp_out}, {total}; {size_out}{throughput_out}')
+
+            if total_size < 50:
+                print(f'TCP output: "{str(data)}", {size_out}')
+            else:
+                print(f'Output latency: {zmq_out}, {tcp_out}, {total}; {size_out}{throughput_out}')
 
     async def tcp_read_handler(self):
         while True:
             data = await self.tcp_reader.read(DATA_CHUNK_SIZE)
-            await self.tcp_read_queue.put(data)
+            tcp_read_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
+            await self.tcp_read_queue.put(
+                (tcp_read_usec, data)
+            )
+            await self.tcp_read_timer_queue.put(
+                (tcp_read_usec, len(data))
+            )
 
     async def zmq_write_handler(self):
         """Read data chunk from tcp socket and write to ZeroMQ socket
@@ -169,11 +201,14 @@ class UserConnection:
         """
 
         while True:
-            data = await self.tcp_read_queue.get()
+            tcp_read_usec, data = await self.tcp_read_queue.get()
+            queue_get_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
             await self.active_zmq_socket.send(data)
+            zmq_send_usec = int(clock_gettime_ns(CLOCK_MONOTONIC)) // 1000
             self.tcp_read_queue.task_done()
-            if data.startswith(b'3.key,'):
-                print(f'keypress: {data}')
+            print(f'tcp to queue: {queue_get_usec - tcp_read_usec}, queue to zmq: {zmq_send_usec - queue_get_usec} in: {data}')
+            # if data.startswith(b'3.key,'):
+            #     print(f'keypress: {data}')
 
 
 class TcpHandler:
@@ -209,6 +244,10 @@ class TcpHandler:
         # - ZeroMQ context
         # - Temp directory for this connection within top level temp directory for server
         with zmq.asyncio.Context() as ctx, TemporaryDirectory(dir=self.server_tmp_dir) as tmp_dir:
+            ctx.setsockopt(zmq.SNDBUF, 32768)
+            ctx.setsockopt(zmq.SNDHWM, 2000)
+            ctx.setsockopt(zmq.RCVBUF, 32768)
+            ctx.setsockopt(zmq.RCVHWM, 2000)
             user_connection = UserConnection(tcp_reader, tcp_writer, ctx, tmp_dir)
             connection_id = await guacd_route_connection(self.proc_map, user_connection)
             if connection_id is not None:
