@@ -39,7 +39,11 @@ def get_client_proc(proc_map: GuacdProcMap, parse_conn_id_addr: str, tmp_dir: st
     """
 
     # Open a ZeroMQ guac_socket and parse identifier
-    guac_sock = guac_socket_create_zmq(zmq.PAIR, parse_conn_id_addr, False)
+    monitor_addr: str = f'{parse_conn_id_addr}-monitor'
+    guac_sock = guac_socket_create_zmq(zmq.PAIR, parse_conn_id_addr, False, monitor_addr)
+    # print(f'Starting monitor at {monitor_addr}')
+    # add_monitor_retval = guac_socket_add_zmq_monitor(guac_sock, zmq.PAIR, monitor_addr, False)
+    # print(f'Got {add_monitor_retval} for adding monitor...')
     identifier = parse_identifier(guac_sock)
 
     if identifier is None:

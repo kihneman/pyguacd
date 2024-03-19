@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 from asyncio import create_task, StreamReader, StreamWriter, Task
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
+from time import clock_gettime_ns, CLOCK_MONOTONIC
 from typing import Iterable, List, Optional
 
 import zmq
@@ -16,7 +17,7 @@ from .utils.ipc_addr import new_ipc_addr
 from .utils.zmq_monitor import check_zmq_monitor_events
 
 
-DATA_CHUNK_SIZE = 2 ** 13  # 1kB data chunk
+DATA_CHUNK_SIZE = 2 ** 13  # 8kB data chunk
 
 
 @dataclass
@@ -25,18 +26,27 @@ class ZmqSocketToTCP:
     ctx: zmq.asyncio.Context
     tcp_writer: StreamWriter
     tmp_dir: str
+    zmq_recv_time: asyncio.Queue
+    zmq_libguac_send_time: asyncio.Queue
 
     address: str = None
+    guac_mon_address: str = None
+    guac_mon_socket: zmq.asyncio.Socket = None
     monitor: zmq.asyncio.Socket = None
     socket: zmq.asyncio.Socket = None
     task: asyncio.Task = None
+    zmq_guac_monitor_task: asyncio.Task = None
 
     def __post_init__(self):
         self.address = new_ipc_addr(self.tmp_dir)
         self.socket = self.ctx.socket(zmq.PAIR)
         self.socket.bind(self.address)
         self.monitor = self.socket.get_monitor_socket()
+        self.guac_mon_address = f'{self.address}-monitor'
+        self.guac_mon_socket = self.ctx.socket(zmq.PAIR)
+        self.guac_mon_socket.bind(self.guac_mon_address)
         self.task = create_task(self.tcp_write_handler())
+        self.zmq_guac_monitor_task = create_task(self.zmq_guac_monitor_handler())
 
     async def monitor_connection(self):
         # These are the events that occur on successful connect and disconnect
@@ -50,12 +60,34 @@ class ZmqSocketToTCP:
 
     async def tcp_write_handler(self):
         while True:
-            data = await self.socket.recv()
+            msg_id_bytes, data = await self.socket.recv_multipart()
+            recv_usec = clock_gettime_ns(CLOCK_MONOTONIC) // 1000
+            msg_id = int.from_bytes(msg_id_bytes)
             if len(data) == 0:
                 break
 
             self.tcp_writer.write(data)
+            await self.zmq_recv_time.put((msg_id, recv_usec, len(data)))
+            # print(f'**** Received msg id "{msg_id}"')
             await self.tcp_writer.drain()
+
+    async def zmq_guac_monitor_handler(self):
+        while True:
+            (
+                msg_id_bytes, sec_bytes, nsec_bytes, data_size_bytes, pthread_id_bytes, send_recv
+            ) = await self.guac_mon_socket.recv_multipart()
+            msg_id = int.from_bytes(msg_id_bytes)
+            usec = int.from_bytes(sec_bytes) * 1000000 + int.from_bytes(nsec_bytes) // 1000
+            data_size = int.from_bytes(data_size_bytes)
+            pthread_id = int.from_bytes(pthread_id_bytes, signed=False)
+            if send_recv == b'SEND':
+                await self.zmq_libguac_send_time.put((msg_id, usec, data_size, pthread_id))
+                if (qsize := self.zmq_libguac_send_time.qsize()) > 1:
+                    print(f'**** Waiting for {qsize} messages from libguac')
+            elif send_recv == b'RECV':
+                print(f'**** Received {data_size} bytes of msg id {msg_id} sent at {usec} usec')
+            else:
+                print(f'Received "{send_recv.decode()}" instead of "SEND" or "RECV" on ZeroMQ libguac monitor socket')
 
 
 @dataclass
@@ -63,14 +95,20 @@ class UserConnection:
     # External TCP connection reader and writer
     tcp_reader: StreamReader
     tcp_writer: StreamWriter
+
     ctx: zmq.asyncio.Context
     tmp_dir: str
+
+    # write_zmq_msg_id: int = 0
 
     # Socket pointer and event for switching TCP read handler to new ZeroMQ socket
     active_zmq_socket: Optional[zmq.asyncio.Socket] = None
 
     # Internal ZeroMQ socket data used for parsing connection id / protocol when the connection starts
     zmq_parse_id: ZmqSocketToTCP = None
+
+    zmq_recv_time: asyncio.Queue = None
+    zmq_libguac_send_time: asyncio.Queue = None
 
     # Internal ZeroMQ socket data used for handling the user connection
     zmq_user_handler: ZmqSocketToTCP = None
@@ -82,12 +120,21 @@ class UserConnection:
     monitor_user_handler: Optional[asyncio.Task] = None
 
     def __post_init__(self):
+        # Init queues
+        self.zmq_recv_time = asyncio.Queue(1000)
+        self.zmq_libguac_send_time = asyncio.Queue(1000)
+
         # Start parse id socket immediately for parsing connection id / protocol
-        self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir)
-        self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir)
+        self.zmq_parse_id = ZmqSocketToTCP(
+            self.ctx, self.tcp_writer, self.tmp_dir, self.zmq_recv_time, self.zmq_libguac_send_time
+        )
+        self.zmq_user_handler = ZmqSocketToTCP(
+            self.ctx, self.tcp_writer, self.tmp_dir, self.zmq_recv_time, self.zmq_libguac_send_time
+        )
         self.active_zmq_socket = self.zmq_parse_id.socket
         self.tcp_to_zmq_task = create_task(self.handle_tcp_to_zmq())
         self.monitor_user_handler = create_task(self.zmq_user_handler.monitor_connection())
+        self.monitor_recv_task = create_task(self.monitor_zmq_recv_time())
 
     def activate_user_handler(self):
         self.active_zmq_socket = self.zmq_user_handler.socket
@@ -100,6 +147,17 @@ class UserConnection:
 
     def start_socket(self, socket):
         socket = self.ctx.socket(zmq.PAIR)
+
+    async def monitor_zmq_recv_time(self):
+        while True:
+            send_msg_id, send_usec, send_data_size, pthread_id = await self.zmq_libguac_send_time.get()
+            recv_msg_id, recv_usec, recv_data_size = await self.zmq_recv_time.get()
+            if send_msg_id != recv_msg_id:
+                print(f'**** Received ZeroMQ messages out of order. Sent {send_msg_id} and received {recv_msg_id}')
+            elif send_data_size != recv_data_size:
+                print(f'**** Mismatch of sent and received data size. Sent {send_data_size} bytes and received {recv_data_size}')
+            else:
+                print(f'Received msg {send_msg_id}, {send_data_size} bytes in {recv_usec - send_usec} usec on thread {pthread_id}')
 
     async def handle_tcp_to_zmq(self):
         """Read data chunk from tcp socket and write to ZeroMQ socket
@@ -114,6 +172,10 @@ class UserConnection:
                 break
 
             await self.active_zmq_socket.send(data)
+            # self.write_zmq_msg_id += 1
+            # await self.active_zmq_socket.send_multipart(
+            #     self.write_zmq_msg_id.to_bytes(4), data
+            # )
 
 
 class TcpHandler:

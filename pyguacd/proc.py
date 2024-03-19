@@ -193,7 +193,8 @@ def guacd_user_thread(client_ptr: POINTER(guac_client), owner: int, user_socket_
     # Create skeleton user
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
+    monitor_addr: str = f'{user_socket_addr}-monitor'
+    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False, monitor_addr)
     user.client = client_ptr
     user.owner = owner
 
