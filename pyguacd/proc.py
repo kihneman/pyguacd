@@ -1,14 +1,14 @@
 import asyncio
 import multiprocessing
 import threading
+import time
 from asyncio.exceptions import CancelledError
 from ctypes import CDLL, POINTER, cast, c_char_p, c_int, c_size_t, c_void_p, create_string_buffer, pointer
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from multiprocessing import Process
 from typing import Callable, Dict, Optional
 
 import zmq
-import zmq.asyncio
 
 from . import libguac_wrapper
 from .constants import (
@@ -34,8 +34,8 @@ class GuacdProc:
     # Same as client connection_id. Repeated here for convenience
     connection_id: Optional[str] = None
 
-    # Prevents simultaneous use of the process socket by multiple users
-    lock: Optional[asyncio.Lock] = None
+    # Map of user socket address to disconnect event
+    user_address_to_disconnect_event: Dict[str, asyncio.Event] = field(default_factory=dict)
 
     # Used by parent to join client process
     process: Optional[Process] = None
@@ -44,12 +44,13 @@ class GuacdProc:
     ready_event: Optional[multiprocessing.Event] = None
 
     # Final asyncio task created by GuacdProcMap to clean up after joining process
-    task: Optional[asyncio.Task] = None
+    cleanup_task: Optional[asyncio.Task] = None
+    user_disconnects_task: asyncio.Task = None
 
     # Process socket ZeroMQ data
     zmq_socket_addr: Optional[str] = None
-    zmq_context: Optional[zmq.asyncio.Context] = None
-    zmq_socket: Optional[zmq.asyncio.Socket] = None
+    zmq_context: Optional[zmq.Context] = None
+    zmq_socket: Optional[zmq.Socket] = None
 
     # Private check if parent has been connected
     _parent_connected = False
@@ -58,7 +59,6 @@ class GuacdProc:
         self.connection_id = str(self.client_ptr.contents.connection_id)
 
         # Initialize synchronization vars
-        self.lock = asyncio.Lock()
         self.ready_event = multiprocessing.Event()
 
         # Create new ZeroMQ IPC address shared between parent and client process
@@ -66,8 +66,8 @@ class GuacdProc:
 
     def bind_client(self):
         """Create zmq_socket and bind client for receiving user socket addresses from parent"""
-        self.zmq_context = zmq.asyncio.Context()
-        self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+        self.zmq_context = zmq.Context()
+        self.zmq_socket = self.zmq_context.socket(zmq.CHANNEL)
         self.zmq_socket.bind(self.zmq_socket_addr)
         self.ready_event.set()
 
@@ -80,8 +80,8 @@ class GuacdProc:
             return False
 
         else:
-            self.zmq_context = zmq.asyncio.Context()
-            self.zmq_socket = self.zmq_context.socket(zmq.PAIR)
+            self.zmq_context = zmq.Context()
+            self.zmq_socket = self.zmq_context.socket(zmq.CHANNEL)
             self.zmq_socket.connect(self.zmq_socket_addr)
             self._parent_connected = True
             return True
@@ -92,19 +92,30 @@ class GuacdProc:
         :return: None if asyncio cancel occurs while waiting, otherwise user socket address
         """
         try:
-            user_socket_addr = await self.zmq_socket.recv()
+            user_socket_addr = await asyncio.to_thread(self.zmq_socket.recv)
         except CancelledError:
             return None
         else:
             return user_socket_addr.decode()
+
+    async def recv_user_address_disconnects(self):
+        while True:
+            user_socket_addr = await asyncio.to_thread(self.zmq_socket.recv)
+            disconnect = self.user_address_to_disconnect_event.get(user_socket_addr.decode())
+            if disconnect is None:
+                print('WARNING: Unknown user disconnect received')
+            else:
+                disconnect.set()
+
+    def send_disconnect_user_addr_from_thread(self, user_socket_addr: str):
+        self.zmq_socket.send(user_socket_addr.encode())
 
     async def send_user_socket_addr(self, zmq_user_addr: str):
         """Send new user connection address to client
 
         :param zmq_user_addr: New user socket address to send
         """
-        async with self.lock:
-            await self.zmq_socket.send(zmq_user_addr.encode())
+        await asyncio.to_thread(self.zmq_socket.send, zmq_user_addr.encode())
 
     def close(self):
         """Close the ZeroMQ socket and destroy context"""
@@ -174,7 +185,7 @@ def cleanup_client(client_ptr: POINTER(guac_client)):
     guacd_log(GuacClientLogLevel.GUAC_LOG_DEBUG, 'Client terminated successfully.')
 
 
-def guacd_user_thread(client_ptr: POINTER(guac_client), owner: int, user_socket_addr: str,
+def guacd_user_thread(proc: GuacdProc, owner: int, user_socket_addr: str,
                       guacd_proc_stop_event: threading.Event):
     """Handles a libguac guac_user lifecycle from allocation to guac_user_free
 
@@ -188,21 +199,28 @@ def guacd_user_thread(client_ptr: POINTER(guac_client), owner: int, user_socket_
         Threading event to stop process if this user disconnects and is the last user
     """
 
+    client_ptr = proc.client_ptr
     client = client_ptr.contents
 
     # Create skeleton user
     user_ptr = guac_user_alloc()
     user = user_ptr.contents
-    user.socket = guac_socket_create_zmq(zmq.PAIR, user_socket_addr, False)
+    user.socket = guac_socket_create_zmq(zmq.CHANNEL, user_socket_addr, False)
     user.client = client_ptr
     user.owner = owner
 
     # Handle user connection from handshake until disconnect/completion
     guac_user_handle_connection(user_ptr, c_int(GUACD_USEC_TIMEOUT))
 
-    # Clean up
+    # Save user_id before clean-up
+    user_id = user.user_id
+
+    # Clean-up
     guac_socket_free(user.socket)
     guac_user_free(user_ptr)
+
+    # Send user disconnect to parent process
+    proc.send_disconnect_user_addr_from_thread(user_socket_addr)
 
     # Stop client and prevent future users if all users are disconnected
     if client.connected_users == 0:
@@ -255,7 +273,7 @@ async def guacd_proc_serve_users(proc: GuacdProc):
 
         # Launch user thread
         guacd_user_thread_coro = asyncio.to_thread(
-            guacd_user_thread, proc.client_ptr, owner, user_socket_addr, guacd_proc_stop_event
+            guacd_user_thread, proc, owner, user_socket_addr, guacd_proc_stop_event
         )
         guacd_user_thread_tasks[user_socket_addr] = asyncio.create_task(guacd_user_thread_coro, name=user_socket_addr)
 

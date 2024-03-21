@@ -39,7 +39,7 @@ def get_client_proc(proc_map: GuacdProcMap, parse_conn_id_addr: str, tmp_dir: st
     """
 
     # Open a ZeroMQ guac_socket and parse identifier
-    guac_sock = guac_socket_create_zmq(zmq.PAIR, parse_conn_id_addr, False)
+    guac_sock = guac_socket_create_zmq(zmq.CHANNEL, parse_conn_id_addr, False)
     identifier = parse_identifier(guac_sock)
 
     if identifier is None:
@@ -172,9 +172,16 @@ async def guacd_route_connection(proc_map: GuacdProcMap, conn: UserConnection) -
         guacd_log(GuacClientLogLevel.GUAC_LOG_INFO, f'Connection ID is "{proc.connection_id}"')
 
         # Add task to join process and wait to remove the process from proc_map
-        proc.task = asyncio.create_task(wait_for_process_cleanup(proc_map, proc))
+        proc.cleanup_task = asyncio.create_task(wait_for_process_cleanup(proc_map, proc))
+        proc.user_disconnects_task = asyncio.create_task(proc.recv_user_address_disconnects())
+
+    # New event for user disconnect
+    user_address = conn.zmq_user_handler.address
+    user_disconnect_event = asyncio.Event()
+    proc.user_address_to_disconnect_event[user_address] = user_disconnect_event
 
     # Add new user (in the case of a new process, this will be the owner)
-    await proc.send_user_socket_addr(conn.zmq_user_handler.address)
+    await proc.send_user_socket_addr(user_address)
 
+    await user_disconnect_event.wait()
     return 0
