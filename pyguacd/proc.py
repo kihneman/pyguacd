@@ -12,7 +12,7 @@ import zmq
 
 from . import libguac_wrapper
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_PROC_START_TIMEOUT, GUACD_USEC_TIMEOUT
+    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_PROC_START_TIMEOUT, GUACD_DEFAULT_LOG_LEVEL, GUACD_USEC_TIMEOUT
 )
 from .libguac_wrapper import (
     guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_log_handler, guac_client_stop,

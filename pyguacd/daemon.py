@@ -11,7 +11,10 @@ import zmq
 import zmq.asyncio
 
 from .connection import guacd_route_connection
-from .constants import GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT
+from .constants import (
+    GuacClientLogLevel, GUACD_DEFAULT_BIND_HOST, GUACD_DEFAULT_BIND_PORT,
+    GUACD_ARG_TO_LOG_LEVEL, GUACD_DEFAULT_LOG_LEVEL
+)
 from .log import guacd_log
 from .proc import GuacdProcMap
 from .utils.ipc_addr import new_ipc_addr
@@ -197,7 +200,12 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('-b', '--bind-host', default=GUACD_DEFAULT_BIND_HOST)
     parser.add_argument('-l', '--bind-port', type=int, default=GUACD_DEFAULT_BIND_PORT)
+    parser.add_argument(
+        '-L', '--log-level', default=GUACD_DEFAULT_LOG_LEVEL.name.split('_')[-1].lower(),
+        choices=GUACD_ARG_TO_LOG_LEVEL
+    )
     ns = parser.parse_args()
+    print(f'Log level {GUACD_ARG_TO_LOG_LEVEL[ns.log_level]}')
 
     # Run asyncio TCP server
     asyncio.run(run_server(ns.bind_host, ns.bind_port))

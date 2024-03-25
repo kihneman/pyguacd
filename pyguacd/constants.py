@@ -35,6 +35,9 @@ GUACD_DEFAULT_BIND_HOST = '0.0.0.0'
 # The default port that guacd should bind to, if no other port is explicitly specified.
 GUACD_DEFAULT_BIND_PORT = 4822
 
+# This constant is copied after GuacClientLogLevel class
+# GUACD_DEFAULT_LOG_LEVEL = GuacClientLogLevel.GUAC_LOG_INFO
+
 # The maximum number of characters per instruction.
 GUAC_INSTRUCTION_MAX_LENGTH = 8192
 
@@ -108,6 +111,11 @@ class GuacClientLogLevel(IntEnum):
     # GUAC_LOG_DEBUG, but which are so low-level that they may affect
     # performance.
     GUAC_LOG_TRACE = 8
+
+
+GUACD_ARG_TO_LOG_LEVEL = {level.name.split('_')[-1].lower(): level for level in GuacClientLogLevel}
+
+GUACD_DEFAULT_LOG_LEVEL = GuacClientLogLevel.GUAC_LOG_INFO
 
 
 class GuacClientState(IntEnum):
