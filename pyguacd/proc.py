@@ -324,7 +324,7 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str):
 
 
 class GuacClientLog:
-    pyguacd_log_level: GuacClientLogLevel = GUACD_DEFAULT_LOG_LEVEL
+    max_log_level: GuacClientLogLevel = GUACD_DEFAULT_LOG_LEVEL
 
     def __init__(self):
         libc = CDLL("libc.so.6")
@@ -334,7 +334,7 @@ class GuacClientLog:
     def get_log_handler(self):
         @ guac_client_log_handler
         def log_handler(guac_client_ptr: POINTER(guac_client), log_level: c_int, msg: String, args: c_void_p):
-            if log_level <= self.pyguacd_log_level:
+            if log_level <= self.max_log_level:
                 message = create_string_buffer(GUAC_CLIENT_LOG_MESSAGE_LEN)
                 self.vsnprintf(message, c_size_t(GUAC_CLIENT_LOG_MESSAGE_LEN), msg.raw, cast(args, c_void_p))
                 guacd_log(GuacClientLogLevel(log_level), str(String(message)))
