@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pyguacd',
-    version='0.10.0',
+    version='0.13.0',
     description='Keeper Guacamole Server Python SDK',
     long_description='Python SDK for Keeper Guacamole Server',
     author='Keeper Security',
