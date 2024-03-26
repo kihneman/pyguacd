@@ -1,11 +1,10 @@
 import asyncio
 import queue
 from argparse import ArgumentParser
-from asyncio import create_task, StreamReader, StreamWriter, Task
+from asyncio import create_task, StreamReader, StreamWriter
 from dataclasses import dataclass, field
 from queue import SimpleQueue
 from tempfile import TemporaryDirectory
-from typing import Iterable, List, Optional
 
 import zmq
 import zmq.asyncio
@@ -18,7 +17,6 @@ from .constants import (
 from .log import guacd_log
 from .proc import GuacClientLog, GuacdProcMap
 from .utils.ipc_addr import new_ipc_addr
-from .utils.zmq_monitor import check_zmq_monitor_events
 
 
 DATA_CHUNK_SIZE = 2 ** 13  # 8kB data chunk
@@ -28,7 +26,7 @@ DATA_CHUNK_SIZE = 2 ** 13  # 8kB data chunk
 class ZmqSocketToTCP:
     """ZeroMQ socket with handler to write out to TCP stream"""
     ctx: zmq.Context
-    tcp_write_queue: SimpleQueue
+    tcp_writer: StreamWriter
     tmp_dir: str
     zmq_type: zmq.SocketType
 
@@ -40,21 +38,17 @@ class ZmqSocketToTCP:
         self.address = new_ipc_addr(self.tmp_dir)
         self.socket = self.ctx.socket(self.zmq_type)
         self.socket.bind(self.address)
-        self.task = create_task(asyncio.to_thread(self.zmq_read_handler))
+        # self.task = create_task(asyncio.to_thread(self.zmq_read_handler))
+        self.task = create_task(self.tcp_write_handler())
 
-    async def monitor_connection(self):
-        # These are the events that occur on successful connect and disconnect
-        zmq_events = [zmq.Event.ACCEPTED, zmq.Event.HANDSHAKE_SUCCEEDED, zmq.Event.DISCONNECTED]
-
-        # Wait for connect and disconnect
-        if (error_msg := await check_zmq_monitor_events(self.monitor, zmq_events)) is not None:
-            guacd_log(
-                GuacClientLogLevel.GUAC_LOG_ERROR, f'Exiting prematurely during handling of connection: {error_msg}'
-            )
-
-    def zmq_read_handler(self):
+    async def tcp_write_handler(self):
         while True:
-            self.tcp_write_queue.put(self.socket.recv())
+            try:
+                data = self.socket.recv(zmq.NOBLOCK)
+            except zmq.ZMQError:
+                data = await asyncio.to_thread(self.socket.recv)
+            self.tcp_writer.write(data)
+            await self.tcp_writer.drain()
 
 
 @dataclass
@@ -78,24 +72,21 @@ class UserConnection:
     zmq_user_handler: ZmqSocketToTCP = None
 
     # Asyncio task for transferring data from external tcp socket to active ZeroMQ socket
-    tcp_to_zmq_task: Optional[asyncio.Task] = None
-
-    # Asyncio task for monitoring the ZeroMQ user handler socket
-    monitor_user_handler: Optional[asyncio.Task] = None
+    tcp_read_task: asyncio.Task = None
 
     def __post_init__(self):
         # Start parse id socket immediately for parsing connection id / protocol
-        self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tmp_dir, zmq.CHANNEL)
-        self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_write_queue, self.tmp_dir, zmq.CHANNEL)
+        self.zmq_parse_id = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir, zmq.CHANNEL)
+        self.zmq_user_handler = ZmqSocketToTCP(self.ctx, self.tcp_writer, self.tmp_dir, zmq.CHANNEL)
         self.active_zmq_socket = self.zmq_parse_id.socket
         self.tcp_read_task = create_task(self.tcp_read_handler())
-        self.tcp_write_task = create_task(self.tcp_write_handler())
+        # self.tcp_write_task = create_task(self.tcp_write_handler())
 
     def activate_user_handler(self):
         self.active_zmq_socket = self.zmq_user_handler.socket
 
     def close(self):
-        tasks = [self.tcp_read_task, self.zmq_parse_id.task, self.zmq_user_handler.task, self.tcp_write_task]
+        tasks = [self.tcp_read_task, self.zmq_parse_id.task, self.zmq_user_handler.task]
         for task in tasks:
             if task and not task.done():
                 task.cancel()
