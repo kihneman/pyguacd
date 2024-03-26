@@ -197,7 +197,6 @@ def main():
     )
     ns = parser.parse_args()
     GuacClientLog.max_log_level = GUACD_ARG_TO_LOG_LEVEL[ns.log_level]
-    print(f'Log level {GuacClientLog.max_log_level.name}')
 
     # Run asyncio TCP server
     asyncio.run(run_server(ns.bind_host, ns.bind_port))
