@@ -1289,7 +1289,7 @@ struct_guac_client._fields_ = [
     ('data', POINTER(None)),
     ('last_sent_timestamp', guac_timestamp),
     ('free_handler', POINTER(guac_client_free_handler)),
-    ('log_handler', POINTER(guac_client_log_handler)),
+    ('log_handler', guac_client_log_handler),
     ('__buffer_pool', POINTER(guac_pool)),
     ('__layer_pool', POINTER(guac_pool)),
     ('__stream_pool', POINTER(guac_pool)),
