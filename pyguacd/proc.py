@@ -12,7 +12,8 @@ import zmq
 
 from . import libguac_wrapper
 from .constants import (
-    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_PROC_START_TIMEOUT, GUACD_DEFAULT_LOG_LEVEL, GUACD_USEC_TIMEOUT
+    GuacClientLogLevel, GuacStatus, GUAC_CLIENT_LOG_MESSAGE_LEN, GUAC_CLIENT_PROC_START_TIMEOUT,
+    GUACD_DEFAULT_LOG_LEVEL, GUACD_USEC_TIMEOUT
 )
 from .libguac_wrapper import (
     guac_client, guac_client_alloc, guac_client_free, guac_client_load_plugin, guac_client_log_handler, guac_client_stop,
@@ -322,17 +323,23 @@ def guacd_exec_proc(proc: GuacdProc, protocol: str):
     cleanup_client(client_ptr)
 
 
-MESSAGE_LEN = 2048
-libc = CDLL("libc.so.6")
-vsnprintf = libc.vsnprintf
-vsnprintf.restype = c_int
+class GuacClientLog:
+    pyguacd_log_level: GuacClientLogLevel = GUACD_DEFAULT_LOG_LEVEL
 
+    def __init__(self):
+        libc = CDLL("libc.so.6")
+        self.vsnprintf = libc.vsnprintf
+        self.vsnprintf.restype = c_int
 
-@guac_client_log_handler
-def log_handler(guac_client_ptr: POINTER(guac_client), log_level: c_int, msg: String, args: c_void_p):
-    message = create_string_buffer(MESSAGE_LEN)
-    vsnprintf(message, c_size_t(MESSAGE_LEN), msg.raw, cast(args, c_void_p))
-    guacd_log(GuacClientLogLevel(log_level), str(String(message)))
+    def get_log_handler(self):
+        @ guac_client_log_handler
+        def log_handler(guac_client_ptr: POINTER(guac_client), log_level: c_int, msg: String, args: c_void_p):
+            if log_level <= self.pyguacd_log_level:
+                message = create_string_buffer(GUAC_CLIENT_LOG_MESSAGE_LEN)
+                self.vsnprintf(message, c_size_t(GUAC_CLIENT_LOG_MESSAGE_LEN), msg.raw, cast(args, c_void_p))
+                guacd_log(GuacClientLogLevel(log_level), str(String(message)))
+
+        return log_handler
 
 
 def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
@@ -350,7 +357,8 @@ def guacd_create_proc(protocol: str, tmp_dir: str) -> Optional[GuacdProc]:
 
     # Associate new client
     proc = GuacdProc(guac_client_alloc(), tmp_dir)
-    # proc.client_ptr.contents.log_handler = log_handler
+    guac_log = GuacClientLog()
+    proc.client_ptr.contents.log_handler = guac_log.get_log_handler()
 
     proc.process = Process(target=guacd_exec_proc, args=(proc, protocol))
     proc.process.start()

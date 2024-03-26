@@ -16,7 +16,7 @@ from .constants import (
     GUACD_ARG_TO_LOG_LEVEL, GUACD_DEFAULT_LOG_LEVEL
 )
 from .log import guacd_log
-from .proc import GuacdProcMap
+from .proc import GuacClientLog, GuacdProcMap
 from .utils.ipc_addr import new_ipc_addr
 from .utils.zmq_monitor import check_zmq_monitor_events
 
@@ -205,7 +205,8 @@ def main():
         choices=GUACD_ARG_TO_LOG_LEVEL
     )
     ns = parser.parse_args()
-    print(f'Log level {GUACD_ARG_TO_LOG_LEVEL[ns.log_level]}')
+    print(f'Log level {GUACD_ARG_TO_LOG_LEVEL[ns.log_level].name}')
+    GuacClientLog.pyguacd_log_level = ns.log_level
 
     # Run asyncio TCP server
     asyncio.run(run_server(ns.bind_host, ns.bind_port))

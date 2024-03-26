@@ -26,6 +26,8 @@ GUACD_LOG_NAME = 'guacd'
 # The character prefix which identifies a client ID.
 GUAC_CLIENT_ID_PREFIX = '$'
 
+GUAC_CLIENT_LOG_MESSAGE_LEN = 2048
+
 # Time in seconds to wait for client process to startup before timeout
 GUAC_CLIENT_PROC_START_TIMEOUT = 2
 
