@@ -199,7 +199,10 @@ def main():
     GuacClientLog.max_log_level = GUACD_ARG_TO_LOG_LEVEL[ns.log_level]
 
     # Run asyncio TCP server
-    asyncio.run(run_server(ns.bind_host, ns.bind_port))
+    try:
+        asyncio.run(run_server(ns.bind_host, ns.bind_port))
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == '__main__':
